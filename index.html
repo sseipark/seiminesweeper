@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>파스텔 지뢰찾기 배틀</title>
+
+    <!-- 브라우저 탭 아이콘(파비콘) 설정 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💣</text></svg>">
+
+    <!-- WebRTC 실시간 P2P 연결 라이브러리 (PeerJS) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f3f0ff;
+            --main-bg: #ffffff;
+            --primary: #a78bfa;
+            --primary-hover: #8b5cf6;
+            --text-color: #4b5563;
+            --cell-bg: #ede9fe;
+            --cell-hover: #ddd6fe;
+            --cell-revealed: #f5f3ff;
+            --border-color: #ddd6fe;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 8px;
+            transition: background-color 0.3s ease;
+            overflow-x: hidden;
+        }
+
+        #confettiCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .app-card {
+            background-color: var(--main-bg);
+            width: 100%;
+            max-width: 490px;
+            border-radius: min(6vw, 24px);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+            padding: min(4vw, 20px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+            transition: all 0.2s ease;
+        }
+
+        .app-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: min(2.5vw, 12px);
+        }
+
+        .title-box {
+            display: flex;
+            align-items: center;
+            gap: min(1.5vw, 6px);
+        }
+
+        .app-title {
+            font-size: clamp(12px, 3.8vw, 19px);
+            font-weight: 800;
+            color: var(--text-color);
+            letter-spacing: -0.5px;
+        }
+
+        .icon-tool-btn {
+            background: none;
+            border: none;
+            font-size: clamp(11px, 3.2vw, 16px);
+            cursor: pointer;
+            padding: min(1vw, 4px);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s ease, background-color 0.2s;
+        }
+
+        .icon-tool-btn:hover { background-color: rgba(0,0,0,0.05); }
+        .icon-tool-btn:active { transform: scale(0.9); }
+
+        .theme-selector {
+            display: flex;
+            gap: min(1vw, 5px);
+            background: rgba(0, 0, 0, 0.03);
+            padding: min(0.8vw, 3px) min(1.2vw, 6px);
+            border-radius: 20px;
+        }
+
+        .color-dot {
+            width: clamp(10px, 3.5vw, 18px);
+            height: clamp(10px, 3.5vw, 18px);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+        }
+
+        .color-dot:hover { transform: scale(1.15); }
+        .color-dot.active { border-color: var(--text-color); transform: scale(1.15); }
+
+        /* 1:1 배틀 모드 패널 */
+        .battle-panel {
+            width: 100%;
+            background: var(--cell-revealed);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .battle-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            justify-content: space-between;
+        }
+
+        .battle-input {
+            width: 70px;
+            padding: 4px 6px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            font-weight: 800;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .battle-btn {
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: none;
+            background-color: var(--primary);
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .battle-btn:hover { background-color: var(--primary-hover); }
+
+        .battle-status-bar {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .progress-track {
+            flex: 1;
+            height: 8px;
+            background: var(--cell-bg);
+            border-radius: 4px;
+            margin: 0 8px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+
+        /* Difficulty Selector Bar */
+        .difficulty-bar {
+            display: flex;
+            width: 100%;
+            background-color: var(--cell-bg);
+            border-radius: min(3vw, 12px);
+            padding: min(0.8vw, 3px);
+            margin-bottom: min(2vw, 10px);
+        }
+
+        .diff-btn {
+            flex: 1;
+            padding: clamp(3px, 1.5vw, 7px) 0;
+            border: none;
+            background: transparent;
+            color: var(--text-color);
+            font-size: clamp(10px, 2.5vw, 12px);
+            font-weight: 700;
+            border-radius: min(2.5vw, 9px);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .diff-btn.active {
+            background-color: #ffffff;
+            color: var(--primary-hover);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Best Record Badge Banner */
+        .best-record-banner {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(0,0,0,0.02);
+            padding: clamp(2px, 1vw, 5px) clamp(6px, 2.5vw, 12px);
+            border-radius: 8px;
+            font-size: clamp(9px, 2.2vw, 11px);
+            font-weight: 700;
+            margin-bottom: min(2vw, 10px);
+        }
+
+        .best-record-val { color: var(--primary-hover); }
+
+        /* Status Dashboard */
+        .status-dashboard {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--cell-revealed);
+            border: 1px solid var(--border-color);
+            border-radius: min(3.5vw, 14px);
+            padding: clamp(4px, 1.5vw, 8px) clamp(8px, 3vw, 16px);
+            margin-bottom: min(2.5vw, 12px);
+        }
+
+        .status-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .status-label {
+            font-size: clamp(8px, 2vw, 10px);
+            font-weight: 600;
+            opacity: 0.6;
+            margin-bottom: 1px;
+        }
+
+        .status-val {
+            font-size: clamp(12px, 3.8vw, 18px);
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .reset-btn {
+            width: clamp(28px, 8.5vw, 42px);
+            height: clamp(28px, 8.5vw, 42px);
+            border-radius: 50%;
+            border: none;
+            background: #ffffff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+            font-size: clamp(14px, 4.5vw, 20px);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.15s ease;
+        }
+
+        .reset-btn:active { transform: scale(0.88); }
+
+        /* Board Area */
+        .board-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            max-height: 60vh;
+            padding: 4px;
+            margin-bottom: min(2.5vw, 12px);
+            border-radius: 10px;
+        }
+
+        .board {
+            display: grid;
+            gap: 3px;
+            margin: auto;
+        }
+
+        .cell {
+            background-color: var(--cell-bg);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.1s ease, background-color 0.12s;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+            line-height: 1;
+        }
+
+        .cell:active:not(.revealed) { transform: scale(0.92); }
+
+        .cell.revealed {
+            background-color: var(--cell-revealed);
+            box-shadow: none;
+            cursor: default;
+            animation: popIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.85); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .cell.mine {
+            background-color: #fca5a5 !important;
+            color: #ffffff;
+            animation: shake 0.3s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            75% { transform: translateX(3px); }
+        }
+
+        .c-1 { color: #60a5fa; }
+        .c-2 { color: #34d399; }
+        .c-3 { color: #f87171; }
+        .c-4 { color: #818cf8; }
+        .c-5 { color: #fb923c; }
+        .c-6 { color: #2dd4bf; }
+
+        /* Bottom Controls */
+        .action-bar {
+            width: 100%;
+            display: flex;
+            gap: min(1.5vw, 8px);
+            justify-content: center;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: clamp(5px, 2vw, 10px);
+            border-radius: min(3vw, 12px);
+            border: 1px solid var(--border-color);
+            background-color: #ffffff;
+            color: var(--text-color);
+            font-size: clamp(10px, 2.5vw, 12px);
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02);
+        }
+
+        .action-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary-hover);
+        }
+
+        .action-btn:active { transform: scale(0.97); }
+
+        .mode-toggle-btn {
+            background-color: var(--cell-bg);
+            border-color: var(--primary);
+        }
+        
+        .mode-toggle-btn.flag-active {
+            background-color: var(--primary);
+            color: #ffffff;
+        }
+
+        .kbd-badge {
+            background-color: rgba(0,0,0,0.05);
+            font-size: clamp(8px, 1.8vw, 10px);
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+
+        /* 몰래하기 전용 스텔스 모드 */
+        body.stealth-mode {
+            padding: 0;
+            background-color: #ffffff;
+        }
+
+        body.stealth-mode .app-card {
+            box-shadow: none;
+            border-radius: 0;
+            padding: 4px;
+            max-width: 100vw;
+            height: 100vh;
+            justify-content: center;
+        }
+
+        body.stealth-mode .difficulty-bar,
+        body.stealth-mode .best-record-banner,
+        body.stealth-mode .battle-panel,
+        body.stealth-mode .app-header {
+            display: none !important;
+        }
+
+        body.stealth-mode .status-dashboard {
+            padding: 3px 8px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+        }
+
+        body.stealth-mode .reset-btn { width: 26px; height: 26px; font-size: 14px; }
+        body.stealth-mode .status-val { font-size: 13px; }
+        body.stealth-mode .board-wrapper { margin-bottom: 4px; max-height: 78vh; }
+        body.stealth-mode .action-btn { padding: 4px; font-size: 10px; }
+
+        /* 보스 키 오버레이 */
+        #bossScreen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background-color: #ffffff;
+            z-index: 9999;
+            font-family: 'Malgun Gothic', sans-serif;
+            color: #000000;
+            cursor: pointer;
+            overflow: auto;
+        }
+
+        #bossScreen.active { display: block; }
+
+        .excel-ribbon {
+            background-color: #107c41;
+            color: #ffffff;
+            padding: 8px 16px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-weight: bold;
+        }
+
+        .excel-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .excel-table th, .excel-table td {
+            border: 1px solid #d4d4d4;
+            padding: 4px 8px;
+            text-align: left;
+        }
+
+        .excel-table th { background-color: #f3f3f3; font-weight: 600; }
+
+        /* Overlay Popup */
+        .game-over-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(6px);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 10;
+        }
+
+        .game-over-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .overlay-title { font-size: clamp(18px, 5vw, 26px); font-weight: 800; margin-bottom: 6px; }
+        .overlay-title.win { color: var(--primary-hover); }
+        .overlay-title.fail { color: #ef4444; }
+
+        .overlay-desc {
+            font-size: clamp(10px, 2.8vw, 13px);
+            color: var(--text-color);
+            margin-bottom: 18px;
+            opacity: 0.85;
+            text-align: center;
+            padding: 0 16px;
+            line-height: 1.4;
+        }
+
+        .restart-app-btn {
+            background-color: var(--primary);
+            color: #ffffff;
+            border: none;
+            padding: 8px 18px;
+            font-size: clamp(11px, 2.8vw, 13px);
+            font-weight: 700;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 6px 16px rgba(167, 139, 250, 0.35);
+            transition: transform 0.15s ease;
+        }
+
+        .restart-app-btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+
+<canvas id="confettiCanvas"></canvas>
+
+<!-- 보스 키 (ESC 누르면 즉시 나타나는 위장 엑셀 창) -->
+<div id="bossScreen" onclick="toggleBossKey()" title="클릭하거나 ESC를 누르면 지뢰찾기로 돌아갑니다">
+    <div class="excel-ribbon">
+        <span>Microsoft Excel</span>
+        <span>2026_하반기_매출현황_보고서.xlsx - 저장됨</span>
+    </div>
+    <div style="padding: 12px;">
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>A (부서명)</th>
+                    <th>B (담당자)</th>
+                    <th>C (목표액)</th>
+                    <th>D (달성액)</th>
+                    <th>E (달성률)</th>
+                    <th>F (비고)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>1</strong></td>
+                    <td>전략기획팀</td><td>김과장</td><td>50,000,000</td><td>54,200,000</td><td>108.4%</td><td>초과 달성</td>
+                </tr>
+                <tr>
+                    <td><strong>2</strong></td>
+                    <td>영업1팀</td><td>이대리</td><td>85,000,000</td><td>81,500,000</td><td>95.8%</td><td>진행 중</td>
+                </tr>
+                <tr>
+                    <td><strong>3</strong></td>
+                    <td>해외마케팅</td><td>박팀장</td><td>120,000,000</td><td>129,600,000</td><td>108.0%</td><td>완료 보고</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="app-card">
+    <!-- Header -->
+    <div class="app-header">
+        <div class="title-box">
+            <div class="app-title">Minesweeper Battle</div>
+            <button class="icon-tool-btn" id="soundToggleBtn" onclick="toggleSound()" title="사운드 켜기/끄기">🔊</button>
+            <button class="icon-tool-btn" onclick="toggleStealthMode()" title="몰컴 미니 모드">🕶️</button>
+            <button class="icon-tool-btn" onclick="toggleBossKey()" title="보스 키 (단축키: ESC)">📑</button>
+            <button class="icon-tool-btn" onclick="openMiniWindow()" title="초미니 팝업창 분리">📱</button>
+        </div>
+        <div class="theme-selector">
+            <div class="color-dot active" style="background-color: #a78bfa;" onclick="setTheme('purple', this)"></div>
+            <div class="color-dot" style="background-color: #f472b6;" onclick="setTheme('pink', this)"></div>
+            <div class="color-dot" style="background-color: #34d399;" onclick="setTheme('mint', this)"></div>
+            <div class="color-dot" style="background-color: #9ca3af;" onclick="setTheme('gray', this)"></div>
+        </div>
+    </div>
+
+    <!-- 1:1 온라인 배틀 컨트롤러 -->
+    <div class="battle-panel">
+        <div class="battle-controls">
+            <span>⚔️ 1:1 배틀</span>
+            <div>
+                <button class="battle-btn" onclick="createBattleRoom()">방 만들기</button>
+                <input type="text" id="joinCodeInput" class="battle-input" placeholder="코드4자리" maxlength="4">
+                <button class="battle-btn" onclick="joinBattleRoom()">참가</button>
+            </div>
+        </div>
+        <div class="battle-status-bar" id="battleStatusBar" style="display: none;">
+            <span>내 진행률</span>
+            <div class="progress-track"><div class="progress-fill" id="myProgressBar"></div></div>
+            <span id="opponentStatus">상대방 대기 중...</span>
+        </div>
+    </div>
+
+    <!-- Difficulty Tabs -->
+    <div class="difficulty-bar">
+        <button class="diff-btn active" onclick="changeDifficulty('easy', this)">초급</button>
+        <button class="diff-btn" onclick="changeDifficulty('medium', this)">중급</button>
+        <button class="diff-btn" onclick="changeDifficulty('hard', this)">고급</button>
+    </div>
+
+    <!-- Best Record Badge -->
+    <div class="best-record-banner">
+        <span>🏆 싱글 최단 기록</span>
+        <span class="best-record-val" id="bestRecordVal">기록 없음</span>
+    </div>
+
+    <!-- Status Dashboard Header -->
+    <div class="status-dashboard">
+        <div class="status-box">
+            <span class="status-label">MINES</span>
+            <span class="status-val" id="mineCount">010</span>
+        </div>
+        <button class="reset-btn" id="faceBtn" onclick="initGame()" title="게임 리셋">😊</button>
+        <div class="status-box">
+            <span class="status-label">TIME</span>
+            <span class="status-val" id="timer">000</span>
+        </div>
+    </div>
+
+    <!-- Game Board Area -->
+    <div class="board-wrapper">
+        <div id="board" class="board"></div>
+    </div>
+
+    <!-- Bottom Actions -->
+    <div class="action-bar">
+        <button class="action-btn mode-toggle-btn" id="touchModeBtn" onclick="toggleTouchMode()">
+            <span id="touchModeIcon">⛏️</span> <span id="touchModeLabel">땅파기</span>
+        </button>
+        <button class="action-btn" onclick="initGame()">
+            🔄 재시작 <span class="kbd-badge">R</span>
+        </button>
+    </div>
+
+    <!-- Overlay Popup -->
+    <div class="game-over-overlay" id="gameOverOverlay">
+        <div class="overlay-title fail" id="overlayTitle">💥 펑!</div>
+        <div class="overlay-desc" id="overlayDesc">지뢰를 밟았습니다. 다시 도전해보세요!</div>
+        <button class="restart-app-btn" onclick="initGame()">처음부터 다시 시작</button>
+    </div>
+</div>
+
+<script>
+    // --- PeerJS WebRTC P2P 배틀 통신 엔진 ---
+    let peer = null;
+    let peerConn = null;
+    let isBattleMode = false;
+    let isHost = false;
+    let sharedSeed = null;
+
+    function generateRandomCode() {
+        return Math.random().toString(36).substring(2, 6).toUpperCase();
+    }
+
+    function initPeer(customId = null) {
+        if (peer) peer.destroy();
+        peer = customId ? new Peer(customId) : new Peer();
+
+        peer.on('open', (id) => {
+            if (isHost) {
+                document.getElementById('opponentStatus').textContent = `방 코드: ${id} (상대 접속 대기 중)`;
+            }
+        });
+
+        peer.on('connection', (conn) => {
+            peerConn = conn;
+            setupPeerListeners();
+            if (isHost) {
+                // 방장이 접속자에게 같은 난이도 및 지뢰 시드 송신
+                sharedSeed = Math.floor(Math.random() * 1000000);
+                peerConn.send({
+                    type: 'START_GAME',
+                    diff: currentDiff,
+                    seed: sharedSeed
+                });
+                document.getElementById('opponentStatus').textContent = '상대방 연결됨! 배틀 시작!';
+                initGame(false);
+            }
+        });
+
+        peer.on('error', (err) => {
+            alert('배틀 연결 오류: 방 코드를 다시 확인해주세요.');
+        });
+    }
+
+    function setupPeerListeners() {
+        peerConn.on('data', (data) => {
+            if (data.type === 'START_GAME') {
+                currentDiff = data.diff;
+                sharedSeed = data.seed;
+                document.getElementById('opponentStatus').textContent = '배틀 시작! 누가 먼저 이길까?';
+                initGame(false);
+            } else if (data.type === 'PROGRESS') {
+                document.getElementById('opponentStatus').textContent = `상대: ${data.progress}% 진행 중`;
+            } else if (data.type === 'BOOM') {
+                triggerGameOver(true, '💥 상대방이 지뢰를 밟고 폭발했습니다! 당신의 승리!');
+            } else if (data.type === 'WIN') {
+                triggerGameOver(false, '😭 상대방이 먼저 지뢰를 다 찾았습니다. 패배!');
+            }
+        });
+    }
+
+    function createBattleRoom() {
+        const roomCode = generateRandomCode();
+        isBattleMode = true;
+        isHost = true;
+        document.getElementById('battleStatusBar').style.display = 'flex';
+        initPeer(roomCode);
+    }
+
+    function joinBattleRoom() {
+        const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+        if (!code || code.length !== 4) {
+            alert('4자리 방 코드를 입력해주세요!');
+            return;
+        }
+        isBattleMode = true;
+        isHost = false;
+        document.getElementById('battleStatusBar').style.display = 'flex';
+        document.getElementById('opponentStatus').textContent = '방에 접속 중...';
+        
+        initPeer();
+        setTimeout(() => {
+            peerConn = peer.connect(code);
+            setupPeerListeners();
+        }, 500);
+    }
+
+    function sendBattleProgress() {
+        if (!isBattleMode || !peerConn) return;
+        let revealedCount = 0;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (grid[r][c].revealed) revealedCount++;
+            }
+        }
+        const totalSafe = (rows * cols - mines);
+        const progress = Math.floor((revealedCount / totalSafe) * 100);
+        
+        document.getElementById('myProgressBar').style.width = `${progress}%`;
+        peerConn.send({ type: 'PROGRESS', progress: progress });
+    }
+
+    // Pseudo-Random Generator (동일한 시드로 동일 지뢰 배치)
+    function seededRandom(seed) {
+        let x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    }
+
+    // Sound Controller
+    class SoundController {
+        constructor() {
+            this.ctx = null;
+            this.enabled = true;
+        }
+
+        initCtx() {
+            if (!this.ctx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) this.ctx = new AudioContext();
+            }
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        }
+
+        playPop() {
+            if (!this.enabled) return;
+            this.initCtx();
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(420, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(780, this.ctx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.08);
+        }
+
+        playFlag() {
+            if (!this.enabled) return;
+            this.initCtx();
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(520, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(880, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.1);
+        }
+
+        playBoom() {
+            if (!this.enabled) return;
+            this.initCtx();
+            if (!this.ctx) return;
+            const bufferSize = this.ctx.sampleRate * 0.4;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+            filter.frequency.linearRampToValueAtTime(60, this.ctx.currentTime + 0.38);
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.38);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+            noise.start();
+        }
+
+        playVictory() {
+            if (!this.enabled) return;
+            this.initCtx();
+            if (!this.ctx) return;
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const start = this.ctx.currentTime + idx * 0.11;
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, start);
+                gain.gain.setValueAtTime(0.25, start);
+                gain.gain.exponentialRampToValueAtTime(0.01, start + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(start);
+                osc.stop(start + 0.26);
+            });
+        }
+    }
+
+    const sound = new SoundController();
+
+    function triggerHaptic(type) {
+        if (!navigator.vibrate) return;
+        if (type === 'tap') navigator.vibrate(12);
+        else if (type === 'flag') navigator.vibrate([18, 30, 20]);
+        else if (type === 'boom') navigator.vibrate([100, 50, 200]);
+        else if (type === 'win') navigator.vibrate([60, 40, 60, 40, 100]);
+    }
+
+    // Confetti
+    const canvas = document.getElementById('confettiCanvas');
+    const ctx = canvas.getContext('2d');
+    let confettiParticles = [];
+    let confettiAnimId = null;
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function launchConfetti() {
+        confettiParticles = [];
+        const pastelColors = ['#a78bfa', '#f472b6', '#34d399', '#fcd34d', '#60a5fa', '#fbcfe8'];
+        for (let i = 0; i < 90; i++) {
+            confettiParticles.push({
+                x: canvas.width / 2, y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 16, vy: (Math.random() - 0.7) * 16,
+                size: Math.random() * 8 + 6,
+                color: pastelColors[Math.floor(Math.random() * pastelColors.length)],
+                rotation: Math.random() * 360, rotSpeed: (Math.random() - 0.5) * 8,
+                alpha: 1
+            });
+        }
+        if (confettiAnimId) cancelAnimationFrame(confettiAnimId);
+        animateConfetti();
+    }
+
+    function animateConfetti() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let activeCount = 0;
+        confettiParticles.forEach(p => {
+            p.x += p.vx; p.y += p.vy; p.vy += 0.35;
+            p.rotation += p.rotSpeed; p.alpha -= 0.009;
+            if (p.alpha > 0) {
+                activeCount++;
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+                ctx.restore();
+            }
+        });
+        if (activeCount > 0) confettiAnimId = requestAnimationFrame(animateConfetti);
+        else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    const themes = {
+        purple: { bg: '#f3f0ff', mainBg: '#ffffff', primary: '#a78bfa', hover: '#8b5cf6', cellBg: '#ede9fe', cellHover: '#ddd6fe', cellRev: '#f5f3ff', border: '#ddd6fe' },
+        pink:   { bg: '#fdf2f8', mainBg: '#ffffff', primary: '#f472b6', hover: '#ec4899', cellBg: '#fce7f3', cellHover: '#fbcfe8', cellRev: '#fff1f2', border: '#fbcfe8' },
+        mint:   { bg: '#ecfdf5', mainBg: '#ffffff', primary: '#34d399', hover: '#10b981', cellBg: '#d1fae5', cellHover: '#a7f3d0', cellRev: '#f0fdf4', border: '#a7f3d0' },
+        gray:   { bg: '#f3f4f6', mainBg: '#ffffff', primary: '#9ca3af', hover: '#4b5563', cellBg: '#e5e7eb', cellHover: '#d1d5db', cellRev: '#f9fafb', border: '#d1d5db' }
+    };
+
+    const config = {
+        easy: { rows: 9, cols: 9, mines: 10 },
+        medium: { rows: 12, cols: 12, mines: 24 },
+        hard: { rows: 14, cols: 14, mines: 36 }
+    };
+
+    let currentDiff = 'easy';
+    let rows, cols, mines;
+    let grid = [];
+    let isFirstClick = true;
+    let gameOver = false;
+    let timerInterval = null;
+    let timeElapsed = 0;
+    let flagsPlaced = 0;
+    let isFlagTouchMode = false;
+
+    const boardEl = document.getElementById('board');
+    const mineCountEl = document.getElementById('mineCount');
+    const timerEl = document.getElementById('timer');
+    const faceBtn = document.getElementById('faceBtn');
+    const overlayEl = document.getElementById('gameOverOverlay');
+    const overlayTitle = document.getElementById('overlayTitle');
+    const overlayDesc = document.getElementById('overlayDesc');
+    const bestRecordVal = document.getElementById('bestRecordVal');
+    const touchModeBtn = document.getElementById('touchModeBtn');
+    const touchModeIcon = document.getElementById('touchModeIcon');
+    const touchModeLabel = document.getElementById('touchModeLabel');
+    const soundToggleBtn = document.getElementById('soundToggleBtn');
+    const bossScreen = document.getElementById('bossScreen');
+
+    function openMiniWindow() {
+        window.open(window.location.href, 'MiniMinesweeper', 'width=320,height=480,resizable=yes,scrollbars=no,status=no,location=no,toolbar=no,menubar=no');
+    }
+
+    function toggleStealthMode() {
+        document.body.classList.toggle('stealth-mode');
+        adjustBoardDimensions();
+    }
+
+    function toggleBossKey() {
+        bossScreen.classList.toggle('active');
+    }
+
+    function toggleSound() {
+        sound.enabled = !sound.enabled;
+        soundToggleBtn.textContent = sound.enabled ? '🔊' : '🔇';
+    }
+
+    function setTheme(name, el) {
+        const t = themes[name];
+        const r = document.documentElement;
+        r.style.setProperty('--bg-color', t.bg);
+        r.style.setProperty('--main-bg', t.mainBg);
+        r.style.setProperty('--primary', t.primary);
+        r.style.setProperty('--primary-hover', t.hover);
+        r.style.setProperty('--cell-bg', t.cellBg);
+        r.style.setProperty('--cell-hover', t.cellHover);
+        r.style.setProperty('--cell-revealed', t.cellRev);
+        r.style.setProperty('--border-color', t.border);
+
+        document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
+        if (el) el.classList.add('active');
+    }
+
+    function toggleTouchMode() {
+        isFlagTouchMode = !isFlagTouchMode;
+        triggerHaptic('tap');
+        if (isFlagTouchMode) {
+            touchModeBtn.classList.add('flag-active');
+            touchModeIcon.textContent = '🚩';
+            touchModeLabel.textContent = '깃발';
+        } else {
+            touchModeBtn.classList.remove('flag-active');
+            touchModeIcon.textContent = '⛏️';
+            touchModeLabel.textContent = '땅파기';
+        }
+    }
+
+    function changeDifficulty(diff, el) {
+        currentDiff = diff;
+        document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+        el.classList.add('active');
+        updateBestRecordDisplay();
+        initGame();
+    }
+
+    function updateBestRecordDisplay() {
+        const record = localStorage.getItem(`minesweeper_best_${currentDiff}`);
+        bestRecordVal.textContent = record ? `${record}초` : '기록 없음';
+    }
+
+    function saveBestRecord(time) {
+        const key = `minesweeper_best_${currentDiff}`;
+        const prev = localStorage.getItem(key);
+        if (!prev || time < parseInt(prev)) {
+            localStorage.setItem(key, time);
+            updateBestRecordDisplay();
+            return true;
+        }
+        return false;
+    }
+
+    function adjustBoardDimensions() {
+        if (!grid || grid.length === 0) return;
+        const cardWidth = document.querySelector('.app-card').clientWidth;
+        const availableW = Math.max(100, cardWidth - 24);
+        
+        const isStealth = document.body.classList.contains('stealth-mode');
+        const maxH = isStealth ? (window.innerHeight * 0.72) : Math.min(window.innerHeight * 0.48, 380);
+        const availableH = Math.max(100, maxH);
+
+        const cellW = Math.floor((availableW - (cols - 1) * 3) / cols);
+        const cellH = Math.floor((availableH - (rows - 1) * 3) / rows);
+        
+        let cellSize = Math.min(cellW, cellH, 36);
+        cellSize = Math.max(cellSize, 10);
+
+        boardEl.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+        const fontSize = Math.max(Math.floor(cellSize * 0.55), 8);
+        const allCells = boardEl.children;
+        for (let i = 0; i < allCells.length; i++) {
+            allCells[i].style.width = `${cellSize}px`;
+            allCells[i].style.height = `${cellSize}px`;
+            allCells[i].style.fontSize = `${fontSize}px`;
+        }
+    }
+
+    window.addEventListener('resize', adjustBoardDimensions);
+
+    function initGame(resetBattle = true) {
+        clearInterval(timerInterval);
+        timeElapsed = 0;
+        isFirstClick = true;
+        gameOver = false;
+        flagsPlaced = 0;
+        
+        overlayEl.classList.remove('active');
+        updateBestRecordDisplay();
+
+        const setting = config[currentDiff];
+        rows = setting.rows; cols = setting.cols; mines = setting.mines;
+
+        timerEl.textContent = '000';
+        mineCountEl.textContent = String(mines).padStart(3, '0');
+        faceBtn.textContent = '😊';
+        document.getElementById('myProgressBar').style.width = '0%';
+
+        boardEl.innerHTML = '';
+        grid = [];
+
+        for (let r = 0; r < rows; r++) {
+            grid[r] = [];
+            for (let c = 0; c < cols; c++) {
+                grid[r][c] = { row: r, col: c, isMine: false, revealed: false, state: 0, neighborMines: 0 };
+                const cellEl = document.createElement('div');
+                cellEl.classList.add('cell');
+                
+                cellEl.addEventListener('click', () => {
+                    if (isFlagTouchMode) handleRightClick(r, c);
+                    else handleLeftClick(r, c);
+                });
+
+                cellEl.addEventListener('contextmenu', (e) => { 
+                    e.preventDefault(); handleRightClick(r, c); 
+                });
+
+                boardEl.appendChild(cellEl);
+            }
+        }
+        adjustBoardDimensions();
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            timeElapsed++;
+            if (timeElapsed > 999) timeElapsed = 999;
+            timerEl.textContent = String(timeElapsed).padStart(3, '0');
+        }, 1000);
+    }
+
+    function placeMines(safeR, safeC) {
+        const safeCoords = new Set();
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                const nr = safeR + dr, nc = safeC + dc;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) safeCoords.add(`${nr},${nc}`);
+            }
+        }
+
+        let placed = 0;
+        const maxMines = Math.min(mines, (rows * cols) - safeCoords.size);
+
+        let seed = sharedSeed || Math.random();
+
+        while (placed < maxMines) {
+            let r, c;
+            if (isBattleMode && sharedSeed) {
+                r = Math.floor(seededRandom(seed++) * rows);
+                c = Math.floor(seededRandom(seed++) * cols);
+            } else {
+                r = Math.floor(Math.random() * rows);
+                c = Math.floor(Math.random() * cols);
+            }
+
+            const key = `${r},${c}`;
+            if (!grid[r][c].isMine && !safeCoords.has(key)) {
+                grid[r][c].isMine = true;
+                placed++;
+            }
+        }
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (grid[r][c].isMine) continue;
+                let count = 0;
+                getNeighbors(r, c).forEach(n => { if (n.isMine) count++; });
+                grid[r][c].neighborMines = count;
+            }
+        }
+    }
+
+    function getNeighbors(r, c) {
+        const list = [];
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                const nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) list.push(grid[nr][nc]);
+            }
+        }
+        return list;
+    }
+
+    function handleLeftClick(r, c) {
+        if (gameOver) return;
+        const cell = grid[r][c];
+
+        if (cell.revealed) { executeChording(r, c); return; }
+        if (cell.state === 1) return;
+
+        if (isFirstClick) {
+            isFirstClick = false;
+            placeMines(r, c);
+            startTimer();
+        }
+
+        if (cell.isMine) {
+            if (isBattleMode && peerConn) peerConn.send({ type: 'BOOM' });
+            triggerGameOver(false);
+            return;
+        }
+
+        sound.playPop();
+        triggerHaptic('tap');
+        revealCell(r, c);
+        sendBattleProgress();
+        checkWin();
+    }
+
+    function executeChording(r, c) {
+        const cell = grid[r][c];
+        if (!cell.revealed || cell.neighborMines === 0) return;
+
+        const neighbors = getNeighbors(r, c);
+        const flaggedCount = neighbors.filter(n => n.state === 1).length;
+
+        if (flaggedCount === cell.neighborMines) {
+            let hitMine = false;
+            neighbors.forEach(n => {
+                if (!n.revealed && n.state !== 1) {
+                    if (n.isMine) hitMine = true;
+                    else revealCell(n.row, n.col);
+                }
+            });
+
+            if (hitMine) {
+                if (isBattleMode && peerConn) peerConn.send({ type: 'BOOM' });
+                triggerGameOver(false);
+            } else {
+                sound.playPop();
+                triggerHaptic('tap');
+                sendBattleProgress();
+                checkWin();
+            }
+        }
+    }
+
+    function revealCell(r, c) {
+        const cell = grid[r][c];
+        if (cell.revealed || cell.state === 1) return;
+
+        cell.revealed = true;
+        const el = getCellEl(r, c);
+        el.classList.add('revealed');
+        el.textContent = '';
+
+        if (cell.neighborMines > 0) {
+            el.textContent = cell.neighborMines;
+            el.classList.add(`c-${cell.neighborMines}`);
+        } else {
+            getNeighbors(r, c).forEach(n => revealCell(n.row, n.col));
+        }
+    }
+
+    function handleRightClick(r, c) {
+        if (gameOver || isFirstClick) return;
+        const cell = grid[r][c];
+        if (cell.revealed) return;
+
+        const el = getCellEl(r, c);
+
+        if (cell.state === 0) {
+            cell.state = 1; el.textContent = '🚩'; flagsPlaced++;
+            sound.playFlag(); triggerHaptic('flag');
+        } else if (cell.state === 1) {
+            cell.state = 2; el.textContent = '❓'; flagsPlaced--;
+            sound.playPop(); triggerHaptic('tap');
+        } else {
+            cell.state = 0; el.textContent = '';
+            sound.playPop(); triggerHaptic('tap');
+        }
+
+        const remain = mines - flagsPlaced;
+        mineCountEl.textContent = String(remain).padStart(3, '0');
+    }
+
+    function checkWin() {
+        let revealedCount = 0;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (grid[r][c].revealed) revealedCount++;
+            }
+        }
+
+        if (revealedCount === (rows * cols - mines)) {
+            if (isBattleMode && peerConn) peerConn.send({ type: 'WIN' });
+            triggerGameOver(true);
+        }
+    }
+
+    function triggerGameOver(isWin, customMsg = null) {
+        gameOver = true;
+        clearInterval(timerInterval);
+
+        if (isWin) {
+            faceBtn.textContent = '😎';
+            overlayTitle.textContent = '🎉 퍼펙트 승리!';
+            overlayTitle.className = 'overlay-title win';
+            
+            const isNewBest = saveBestRecord(timeElapsed);
+            let desc = customMsg || `${timeElapsed}초 만에 모든 지뢰를 완벽히 찾아냈습니다!`;
+            if (isNewBest && !customMsg) desc += '<br>🌟 축하합니다! 최고 기록 경신!';
+            overlayDesc.innerHTML = desc;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (grid[r][c].isMine) getCellEl(r, c).textContent = '🚩';
+                }
+            }
+
+            sound.playVictory();
+            triggerHaptic('win');
+            launchConfetti();
+            setTimeout(() => overlayEl.classList.add('active'), 500);
+        } else {
+            faceBtn.textContent = '😵';
+            overlayTitle.textContent = '💥 펑!';
+            overlayTitle.className = 'overlay-title fail';
+            overlayDesc.innerHTML = customMsg || '지뢰를 밟았습니다.<br>다시 도전해보세요!';
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (grid[r][c].isMine) {
+                        const el = getCellEl(r, c);
+                        el.classList.add('mine');
+                        el.textContent = '💣';
+                    }
+                }
+            }
+
+            sound.playBoom();
+            triggerHaptic('boom');
+            setTimeout(() => overlayEl.classList.add('active'), 600);
+        }
+    }
+
+    function getCellEl(r, c) { return boardEl.children[r * cols + c]; }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'r' || e.key === 'R' || e.key === 'F2') initGame();
+        if (e.key === 'Escape') toggleBossKey();
+    });
+
+    initGame();
+</script>
+</body>
+</html>
