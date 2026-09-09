@@ -58,7 +58,7 @@
         .app-card {
             background-color: var(--main-bg);
             width: 100%;
-            max-width: 960px; /* 2인 화면을 위해 확장 */
+            max-width: 960px;
             border-radius: 24px;
             box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
             padding: 18px;
@@ -125,7 +125,6 @@
         .color-dot:hover { transform: scale(1.15); }
         .color-dot.active { border-color: var(--text-color); transform: scale(1.15); }
 
-        /* 실시간 배틀 컨트롤 바 */
         .battle-control-bar {
             width: 100%;
             background: var(--cell-revealed);
@@ -176,7 +175,6 @@
         }
         .status-dot.online { background-color: #22c55e; }
 
-        /* 듀얼 스크린 레이아웃 (내 화면 vs 친구 화면) */
         .battle-arena {
             width: 100%;
             display: flex;
@@ -226,7 +224,6 @@
             opacity: 0.75;
         }
 
-        /* Status Dashboard */
         .status-dashboard {
             width: 100%;
             display: flex;
@@ -275,7 +272,6 @@
             align-items: center;
         }
 
-        /* Board Area */
         .board-wrapper {
             width: 100%;
             display: flex;
@@ -308,7 +304,7 @@
 
         .friend-col .cell {
             background-color: var(--friend-cell-bg);
-            cursor: default; /* 친구 판은 내가 클릭 못함 */
+            cursor: default;
         }
 
         .cell.revealed {
@@ -333,7 +329,6 @@
         .c-5 { color: #fb923c; }
         .c-6 { color: #2dd4bf; }
 
-        /* 난이도 바 */
         .difficulty-bar {
             display: flex;
             width: 100%;
@@ -362,7 +357,6 @@
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
         }
 
-        /* 하단 액션 버튼 */
         .action-bar {
             width: 100%;
             display: flex;
@@ -390,26 +384,22 @@
         .action-btn:hover { border-color: var(--primary); color: var(--primary-hover); }
         .mode-toggle-btn.flag-active { background-color: var(--primary); color: #ffffff; }
 
-        /* 보스 키 오버레이 */
-        #bossScreen {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background-color: #ffffff;
-            z-index: 9999;
-            font-family: 'Malgun Gothic', sans-serif;
-            color: #000000;
-            cursor: pointer;
-            overflow: auto;
-        }
+        body.stealth-mode { padding: 0; background-color: #ffffff; }
+        body.stealth-mode .app-card { box-shadow: none; border-radius: 0; padding: 4px; max-width: 100vw; height: 100vh; justify-content: center; }
+        body.stealth-mode .difficulty-bar, body.stealth-mode .battle-control-bar, body.stealth-mode .app-header { display: none !important; }
+        body.stealth-mode .status-dashboard { padding: 3px 8px; margin-bottom: 4px; border-radius: 6px; }
+        body.stealth-mode .face-btn { width: 26px; height: 26px; font-size: 14px; }
+        body.stealth-mode .status-val { font-size: 13px; }
+        body.stealth-mode .board-wrapper { margin-bottom: 4px; max-height: 78vh; }
+        body.stealth-mode .action-btn { padding: 4px; font-size: 10px; }
+
+        #bossScreen { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #ffffff; z-index: 9999; font-family: 'Malgun Gothic', sans-serif; color: #000000; cursor: pointer; overflow: auto; }
         #bossScreen.active { display: block; }
         .excel-ribbon { background-color: #107c41; color: #fff; padding: 8px 16px; font-size: 12px; font-weight: bold; }
         .excel-table { width: 100%; border-collapse: collapse; font-size: 11px; }
         .excel-table th, .excel-table td { border: 1px solid #d4d4d4; padding: 4px 8px; }
         .excel-table th { background: #f3f3f3; }
 
-        /* 결과 오버레이 */
         .game-over-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -436,7 +426,6 @@
             font-size: 13px; font-weight: 700; border-radius: 12px; cursor: pointer;
         }
 
-        /* 스마트폰 가로폭 최적화 (모바일에서는 위아래 배치) */
         @media (max-width: 720px) {
             .battle-arena { flex-direction: column; align-items: center; }
             .screen-column { width: 100%; }
@@ -447,7 +436,6 @@
 
 <canvas id="confettiCanvas"></canvas>
 
-<!-- 보스 키 (ESC 즉시 엑셀 화면 위장) -->
 <div id="bossScreen" onclick="toggleBossKey()">
     <div class="excel-ribbon">Microsoft Excel - 2026_상반기_재무보고서.xlsx</div>
     <div style="padding: 12px;">
@@ -480,11 +468,11 @@
     <div class="battle-control-bar">
         <div class="battle-status-tag">
             <span class="status-dot" id="netStatusDot"></span>
-            <span id="netStatusText">혼자 연습 중</span>
+            <span id="netStatusText">연결 대기 중...</span>
         </div>
         <div class="battle-btn-group">
             <button class="action-chip-btn" onclick="copyInviteLink()">⚔️ 실시간 배틀 초대 링크 복사</button>
-            <button class="action-chip-btn secondary" id="botToggleBtn" onclick="toggleBotMatch()">🤖 봇과 연습</button>
+            <button class="action-chip-btn secondary" id="botToggleBtn" onclick="toggleBotMatch()">🤖 봇 대결</button>
         </div>
     </div>
 
@@ -504,7 +492,7 @@
             </div>
             <div class="status-dashboard">
                 <div class="status-box"><span class="status-label">MINES</span><span class="status-val" id="myMineCount">010</span></div>
-                <button class="face-btn" id="myFaceBtn" onclick="initGame()">😊</button>
+                <button class="face-btn" id="myFaceBtn" onclick="requestRestart()">😊</button>
                 <div class="status-box"><span class="status-label">TIME</span><span class="status-val" id="myTimer">000</span></div>
             </div>
             <div class="board-wrapper"><div id="myBoard" class="board"></div></div>
@@ -530,8 +518,8 @@
         <button class="action-btn mode-toggle-btn" id="touchModeBtn" onclick="toggleTouchMode()">
             <span id="touchModeIcon">⛏️</span> <span id="touchModeLabel">땅파기</span>
         </button>
-        <button class="action-btn" onclick="initGame()">
-            🔄 내 게임 재시작 <span style="font-size:10px;opacity:0.6;">(R)</span>
+        <button class="action-btn" onclick="requestRestart()">
+            🔄 함께 재시작 <span style="font-size:10px;opacity:0.6;">(R)</span>
         </button>
     </div>
 
@@ -539,7 +527,7 @@
     <div class="game-over-overlay" id="gameOverOverlay">
         <div class="overlay-title fail" id="overlayTitle">💥 펑!</div>
         <div class="overlay-desc" id="overlayDesc">게임 오버!</div>
-        <button class="restart-app-btn" onclick="initGame()">다시 대결하기</button>
+        <button class="restart-app-btn" onclick="requestRestart()">다시 대결하기</button>
     </div>
 </div>
 
@@ -560,13 +548,14 @@
     let myFlags = 0, friendFlags = 0;
     let isFlagTouchMode = false;
 
-    // 배틀 및 웹소켓 통신 변수
+    // 통신 상태
     let roomCode = null;
     let myId = 'user_' + Math.random().toString(36).substring(2, 7);
     let mqttClient = null;
     let isBotActive = false;
     let botInterval = null;
     let currentSeed = 12345;
+    let isPeerOnline = false;
 
     const myBoardEl = document.getElementById('myBoard');
     const friendBoardEl = document.getElementById('friendBoard');
@@ -584,7 +573,7 @@
     const overlayTitle = document.getElementById('overlayTitle');
     const overlayDesc = document.getElementById('overlayDesc');
 
-    // --- 실시간 웹소켓(MQTT) P2P 방 연동 ---
+    // --- 통신 연동 (MQTT 실시간) ---
     function initNetwork() {
         const urlParams = new URLSearchParams(window.location.search);
         roomCode = urlParams.get('room');
@@ -598,20 +587,19 @@
         netStatusText.textContent = `방 코드 [${roomCode}] 접속 중...`;
 
         try {
-            // 공용 오픈 웹소켓 브로커 연결 (설치 필요 없음, 100% 무료)
             mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
                 clientId: myId,
                 clean: true,
-                reconnectPeriod: 2000
+                keepalive: 10
             });
 
             mqttClient.on('connect', () => {
                 netStatusDot.classList.add('online');
-                netStatusText.textContent = `🟢 라이브 연결됨 (방: ${roomCode})`;
-                mqttClient.subscribe(`seimines/room/${roomCode}/#`);
+                netStatusText.textContent = `🟢 연결됨 (방: ${roomCode})`;
+                mqttClient.subscribe(`seimines/v2/${roomCode}/#`);
 
-                // 방 접속 인사 및 현재 게임 동기화 요청
-                sendNetMsg('HELLO', { sender: myId, diff: currentDiff, seed: currentSeed });
+                // 입장 신호 + 현재 난이도/시드 보냄
+                sendNetMsg('HELLO', { diff: currentDiff, seed: currentSeed });
             });
 
             mqttClient.on('message', (topic, payload) => {
@@ -623,7 +611,7 @@
                 } catch (e) {}
             });
         } catch (e) {
-            netStatusText.textContent = '오프라인 (솔로 모드)';
+            netStatusText.textContent = '솔로 모드';
         }
     }
 
@@ -631,50 +619,70 @@
         if (!mqttClient || !mqttClient.connected) return;
         data.type = type;
         data.sender = myId;
-        mqttClient.publish(`seimines/room/${roomCode}/msg`, JSON.stringify(data));
+        mqttClient.publish(`seimines/v2/${roomCode}/msg`, JSON.stringify(data));
     }
 
     function handleRemoteMessage(msg) {
         if (msg.type === 'HELLO') {
+            isPeerOnline = true;
             friendProgressStat.textContent = '🟢 친구 접속 완료!';
-            // 상대방에게 내 상태 전송
+            // 신규 접속한 친구에게 현재 상태 동기화
             sendNetMsg('SYNC_GAME', { diff: currentDiff, seed: currentSeed });
         } else if (msg.type === 'SYNC_GAME') {
-            friendProgressStat.textContent = '🟢 대결 중';
-            if (currentSeed !== msg.seed) {
+            isPeerOnline = true;
+            friendProgressStat.textContent = '🟢 대결 진행 중';
+            if (currentSeed !== msg.seed || currentDiff !== msg.diff) {
                 currentSeed = msg.seed;
                 currentDiff = msg.diff;
                 initGame(false);
             }
         } else if (msg.type === 'ACTION') {
-            // 친구가 칸을 열거나 깃발 꽂음 -> 친구 보드에 실시간 반영!
+            // 친구가 누른 칸 라이브 보드에 즉시 반영
             applyFriendAction(msg);
+        } else if (msg.type === 'RESTART_REPLY' || msg.type === 'RESTART_REQ') {
+            // 같이 리셋
+            currentSeed = msg.seed;
+            currentDiff = msg.diff || currentDiff;
+            initGame(false);
         } else if (msg.type === 'WIN') {
             friendFaceBtn.textContent = '😎';
             triggerGameOver(false, '😭 상대방이 먼저 모든 지뢰를 찾았습니다! 패배!');
         } else if (msg.type === 'BOOM') {
             friendFaceBtn.textContent = '😵';
-            if (friendGrid[msg.r] && friendGrid[msg.r][msg.c]) {
+            if (msg.r !== undefined && msg.c !== undefined) {
                 const el = getFriendCellEl(msg.r, msg.c);
-                el.classList.add('mine');
-                el.textContent = '💣';
+                if (el) {
+                    el.classList.add('mine');
+                    el.textContent = '💣';
+                }
             }
-            triggerGameOver(true, '🎉 상대방이 지뢰를 밟고 폭발했습니다! 나의 승리!');
-        } else if (msg.type === 'RESTART') {
-            resetFriendBoard();
+            triggerGameOver(true, '🎉 상대방이 지뢰를 밟았습니다! 나의 승리!');
         }
     }
 
     function copyInviteLink() {
         const fullUrl = window.location.origin + window.location.pathname + '?room=' + roomCode;
         navigator.clipboard.writeText(fullUrl).then(() => {
-            alert(`⚔️ 실시간 배틀 초대 링크가 복사되었습니다!\n\n${fullUrl}\n\n친구에게 카톡으로 보내면 내 옆 화면에 친구 플레이가 생중계됩니다.`);
+            alert(`⚔️ 실시간 배틀 초대 링크가 복사되었습니다!\n\n${fullUrl}\n\n친구에게 전달하면 내 옆 화면에 친구 플레이가 바로 생중계됩니다.`);
         }).catch(() => {
-            prompt('아래 링크를 복사해 친구에게 보내세요:', fullUrl);
+            prompt('아래 링크를 복사하여 친구에게 공유하세요:', fullUrl);
         });
     }
 
-    // --- 게임 보드 생성 및 로직 ---
+    // --- 동시 재시작 요청 ---
+    function requestRestart() {
+        if (isPeerOnline && !gameOver && !isFirstClick) {
+            if (!confirm('게임 진행 중에 재시작하면 친구의 화면도 함께 초기화됩니다. 같이 다시 시작하시겠습니까?')) {
+                return;
+            }
+        }
+        const newSeed = Math.floor(Math.random() * 900000) + 100000;
+        currentSeed = newSeed;
+        sendNetMsg('RESTART_REQ', { seed: newSeed, diff: currentDiff });
+        initGame(false);
+    }
+
+    // --- 난이도/시드 랜덤 유틸 ---
     function seededRandom(seed) {
         let x = Math.sin(seed++) * 10000;
         return x - Math.floor(x);
@@ -708,7 +716,7 @@
         // 2. 친구 보드 초기화
         resetFriendBoard();
 
-        if (notify) sendNetMsg('RESTART', { seed: currentSeed, diff: currentDiff });
+        if (notify) sendNetMsg('RESTART_REQ', { seed: currentSeed, diff: currentDiff });
     }
 
     function resetFriendBoard() {
@@ -719,6 +727,7 @@
         friendMineCountEl.textContent = String(mines).padStart(3, '0');
         friendTimerEl.textContent = '000';
         friendFaceBtn.textContent = '😊';
+        friendProgressStat.textContent = isPeerOnline ? '🟢 대결 준비 완료' : '대기 중...';
     }
 
     function createEmptyGrid() {
@@ -756,7 +765,6 @@
         }
     }
 
-    // 동일 시드를 사용해 친구와 똑같은 지뢰 배치
     function placeMines(safeR, safeC) {
         const safeCoords = new Set();
         for (let dr = -1; dr <= 1; dr++) {
@@ -802,7 +810,7 @@
         return list;
     }
 
-    // --- 내 조작 처리 ---
+    // --- 내 클릭 조작 ---
     function handleMyLeftClick(r, c) {
         if (gameOver) return;
         const cell = myGrid[r][c];
@@ -904,7 +912,7 @@
         myProgressStat.textContent = `진행률: ${pct}%`;
     }
 
-    // --- 친구 화면(우측 보드) 실시간 렌더링 ---
+    // --- 친구가 누른 화면 라이브 동기화 ---
     function applyFriendAction(msg) {
         const el = getFriendCellEl(msg.r, msg.c);
         if (!el) return;
@@ -929,22 +937,21 @@
             }
         }
 
-        // 친구 진행률 추정 계산
         let friendRev = friendBoardEl.querySelectorAll('.cell.revealed').length;
         const pct = Math.min(100, Math.floor((friendRev / (rows * cols - mines)) * 100));
         friendProgressStat.textContent = `진행률: ${pct}%`;
     }
 
-    // --- 봇 대결 기능 (테스트용) ---
+    // --- 봇 대결 테스트 ---
     function toggleBotMatch() {
         isBotActive = !isBotActive;
         const btn = document.getElementById('botToggleBtn');
         if (isBotActive) {
             btn.textContent = '🛑 봇 중지';
-            friendProgressStat.textContent = '🤖 인공지능 봇 대전 중';
+            friendProgressStat.textContent = '🤖 봇 대전 진행 중';
             startBotAI();
         } else {
-            btn.textContent = '🤖 봇과 연습';
+            btn.textContent = '🤖 봇 대결';
             clearInterval(botInterval);
             resetFriendBoard();
         }
@@ -971,10 +978,10 @@
             if (Math.random() < 0.15) {
                 applyFriendAction({ action: 'flag', r: target.r, c: target.c, state: 1, remain: Math.max(0, mines - 3) });
             }
-        }, 1200);
+        }, 1100);
     }
 
-    // --- 타이머 및 헬퍼 ---
+    // --- 타이머 및 스케일 유틸 ---
     function startMyTimer() {
         timerInterval = setInterval(() => {
             timeElapsed++;
@@ -1048,7 +1055,7 @@
         currentDiff = diff;
         document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
         if (el) el.classList.add('active');
-        initGame();
+        requestRestart();
     }
 
     function setTheme(name, el) {
@@ -1075,12 +1082,12 @@
     function toggleSound() {}
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'r' || e.key === 'R') initGame();
+        if (e.key === 'r' || e.key === 'R') requestRestart();
         if (e.key === 'Escape') toggleBossKey();
     });
 
     // 시작
-    initGame();
+    initGame(false);
     initNetwork();
 </script>
 </body>
