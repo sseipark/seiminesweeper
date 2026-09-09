@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>파스텔 지뢰찾기 - 실시간 라이브 배틀</title>
+    <title>매출현황보고서_세이</title>
 
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💣</text></svg>">
 
@@ -58,7 +58,7 @@
         .app-card {
             background-color: var(--main-bg);
             width: 100%;
-            max-width: 960px;
+            max-width: 480px;
             border-radius: 24px;
             box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
             padding: 18px;
@@ -68,6 +68,10 @@
             position: relative;
             z-index: 1;
             transition: max-width 0.3s ease;
+        }
+
+        .app-card.duel-mode-active {
+            max-width: 960px;
         }
 
         .app-header {
@@ -125,6 +129,34 @@
         .color-dot:hover { transform: scale(1.15); }
         .color-dot.active { border-color: var(--text-color); transform: scale(1.15); }
 
+        .game-mode-bar {
+            display: flex;
+            width: 100%;
+            background-color: rgba(0,0,0,0.04);
+            border-radius: 12px;
+            padding: 3px;
+            margin-bottom: 10px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 7px 0;
+            border: none;
+            background: transparent;
+            color: var(--text-color);
+            font-size: 12px;
+            font-weight: 800;
+            border-radius: 9px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .mode-btn.active {
+            background-color: var(--primary);
+            color: #ffffff;
+            box-shadow: 0 2px 8px rgba(167, 139, 250, 0.3);
+        }
+
         .battle-control-bar {
             width: 100%;
             background: var(--cell-revealed);
@@ -132,7 +164,7 @@
             border-radius: 12px;
             padding: 8px 12px;
             margin-bottom: 10px;
-            display: flex;
+            display: none;
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
@@ -186,6 +218,7 @@
 
         .screen-column {
             flex: 1;
+            width: 100%;
             max-width: 440px;
             background: rgba(0,0,0,0.015);
             border: 1px solid var(--border-color);
@@ -200,6 +233,7 @@
         .screen-column.friend-col {
             border-color: #fbcfe8;
             background: #fff5f7;
+            display: none;
         }
 
         .player-badge {
@@ -386,7 +420,7 @@
 
         body.stealth-mode { padding: 0; background-color: #ffffff; }
         body.stealth-mode .app-card { box-shadow: none; border-radius: 0; padding: 4px; max-width: 100vw; height: 100vh; justify-content: center; }
-        body.stealth-mode .difficulty-bar, body.stealth-mode .battle-control-bar, body.stealth-mode .app-header { display: none !important; }
+        body.stealth-mode .difficulty-bar, body.stealth-mode .game-mode-bar, body.stealth-mode .battle-control-bar, body.stealth-mode .app-header { display: none !important; }
         body.stealth-mode .status-dashboard { padding: 3px 8px; margin-bottom: 4px; border-radius: 6px; }
         body.stealth-mode .face-btn { width: 26px; height: 26px; font-size: 14px; }
         body.stealth-mode .status-val { font-size: 13px; }
@@ -447,11 +481,11 @@
     </div>
 </div>
 
-<div class="app-card">
+<div class="app-card" id="appCard">
     <!-- Header -->
     <div class="app-header">
         <div class="title-box">
-            <div class="app-title">Minesweeper Duo</div>
+            <div class="app-title">Minesweeper</div>
             <button class="icon-tool-btn" id="soundToggleBtn" onclick="toggleSound()">🔊</button>
             <button class="icon-tool-btn" onclick="toggleBossKey()">📑</button>
             <button class="icon-tool-btn" onclick="openMiniWindow()">📱</button>
@@ -464,31 +498,37 @@
         </div>
     </div>
 
+    <!-- 플레이 모드 선택 탭 -->
+    <div class="game-mode-bar">
+        <button class="mode-btn active" id="singleModeBtn" onclick="selectPlayMode('single')">👤 1인 싱글 모드</button>
+        <button class="mode-btn" id="duelModeBtn" onclick="selectPlayMode('duel')">⚔️ 1:1 라이브 대결</button>
+    </div>
+
     <!-- 1:1 라이브 배틀 컨트롤 바 -->
-    <div class="battle-control-bar">
+    <div class="battle-control-bar" id="battleControlBar">
         <div class="battle-status-tag">
             <span class="status-dot" id="netStatusDot"></span>
             <span id="netStatusText">연결 대기 중...</span>
         </div>
         <div class="battle-btn-group">
-            <button class="action-chip-btn" onclick="copyInviteLink()">⚔️ 실시간 배틀 초대 링크 복사</button>
+            <button class="action-chip-btn" onclick="copyInviteLink()">⚔️ 대결 초대 링크 복사</button>
             <button class="action-chip-btn secondary" id="botToggleBtn" onclick="toggleBotMatch()">🤖 봇 대결</button>
         </div>
     </div>
 
-    <!-- 난이도 바 (초급 / 중급 / 고급 모두 복구) -->
+    <!-- 난이도 바 -->
     <div class="difficulty-bar">
         <button class="diff-btn active" onclick="changeDifficulty('easy', this)">초급 (9x9)</button>
         <button class="diff-btn" onclick="changeDifficulty('medium', this)">중급 (12x12)</button>
         <button class="diff-btn" onclick="changeDifficulty('hard', this)">고급 (14x14)</button>
     </div>
 
-    <!-- 듀얼 스크린 아레나 (내 화면 VS 친구 화면) -->
+    <!-- 듀얼 스크린 아레나 -->
     <div class="battle-arena">
         <!-- 내 화면 (좌측) -->
         <div class="screen-column">
             <div class="player-badge">
-                <span class="name">🎮 나 (Player 1)</span>
+                <span class="name" id="myPlayerBadgeName">🎮 내 지뢰판</span>
                 <span class="stat" id="myProgressStat">진행률: 0%</span>
             </div>
             <div class="status-dashboard">
@@ -499,8 +539,8 @@
             <div class="board-wrapper"><div id="myBoard" class="board"></div></div>
         </div>
 
-        <!-- 친구 실시간 화면 (우측) -->
-        <div class="screen-column friend-col">
+        <!-- 친구 실시간 화면 (우측: 대결 모드 시 활성화) -->
+        <div class="screen-column friend-col" id="friendCol">
             <div class="player-badge">
                 <span class="name" style="color: var(--friend-primary);">👀 친구 실시간 화면</span>
                 <span class="stat" id="friendProgressStat">대기 중...</span>
@@ -520,7 +560,7 @@
             <span id="touchModeIcon">⛏️</span> <span id="touchModeLabel">땅파기</span>
         </button>
         <button class="action-btn" onclick="requestRestart()">
-            🔄 함께 재시작 <span style="font-size:10px;opacity:0.6;">(R)</span>
+            🔄 재시작 <span style="font-size:10px;opacity:0.6;">(R)</span>
         </button>
     </div>
 
@@ -528,7 +568,7 @@
     <div class="game-over-overlay" id="gameOverOverlay">
         <div class="overlay-title fail" id="overlayTitle">💥 펑!</div>
         <div class="overlay-desc" id="overlayDesc">게임 오버!</div>
-        <button class="restart-app-btn" onclick="requestRestart()">다시 대결하기</button>
+        <button class="restart-app-btn" onclick="requestRestart()">다시 시작하기</button>
     </div>
 </div>
 
@@ -540,6 +580,7 @@
         hard: { rows: 14, cols: 14, mines: 36, cellSize: 20 }
     };
 
+    let currentMode = 'single';
     let currentDiff = 'easy';
     let rows = 9, cols = 9, mines = 10, cellSize = 30;
     let myGrid = [], friendGrid = [];
@@ -559,6 +600,13 @@
     let currentSeed = 12345;
     let isPeerOnline = false;
 
+    const appCard = document.getElementById('appCard');
+    const friendCol = document.getElementById('friendCol');
+    const battleControlBar = document.getElementById('battleControlBar');
+    const singleModeBtn = document.getElementById('singleModeBtn');
+    const duelModeBtn = document.getElementById('duelModeBtn');
+    const myPlayerBadgeName = document.getElementById('myPlayerBadgeName');
+
     const myBoardEl = document.getElementById('myBoard');
     const friendBoardEl = document.getElementById('friendBoard');
     const myMineCountEl = document.getElementById('myMineCount');
@@ -575,12 +623,35 @@
     const overlayTitle = document.getElementById('overlayTitle');
     const overlayDesc = document.getElementById('overlayDesc');
 
-    // --- 통신 연동 (MQTT 실시간) ---
+    function selectPlayMode(mode) {
+        currentMode = mode;
+        if (mode === 'single') {
+            singleModeBtn.classList.add('active');
+            duelModeBtn.classList.remove('active');
+            appCard.classList.remove('duel-mode-active');
+            friendCol.style.display = 'none';
+            battleControlBar.style.display = 'none';
+            myPlayerBadgeName.textContent = '🎮 내 지뢰판';
+            if (isBotActive) toggleBotMatch();
+        } else {
+            duelModeBtn.classList.add('active');
+            singleModeBtn.classList.remove('active');
+            appCard.classList.add('duel-mode-active');
+            friendCol.style.display = 'flex';
+            battleControlBar.style.display = 'flex';
+            myPlayerBadgeName.textContent = '🎮 나 (Player 1)';
+            if (!mqttClient) initNetwork();
+        }
+        initGame(false);
+    }
+
     function initNetwork() {
         const urlParams = new URLSearchParams(window.location.search);
         roomCode = urlParams.get('room');
 
-        if (!roomCode) {
+        if (roomCode) {
+            selectPlayMode('duel');
+        } else {
             roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
             const newUrl = window.location.pathname + '?room=' + roomCode;
             window.history.replaceState(null, '', newUrl);
@@ -617,7 +688,7 @@
     }
 
     function sendNetMsg(type, data = {}) {
-        if (!mqttClient || !mqttClient.connected) return;
+        if (currentMode !== 'duel' || !mqttClient || !mqttClient.connected) return;
         data.type = type;
         data.sender = myId;
         mqttClient.publish(`seimines/v3/${roomCode}/msg`, JSON.stringify(data));
@@ -669,14 +740,14 @@
     }
 
     function requestRestart() {
-        if (isPeerOnline && !gameOver && !isFirstClick) {
+        if (currentMode === 'duel' && isPeerOnline && !gameOver && !isFirstClick) {
             if (!confirm('게임 진행 중에 재시작하면 친구의 화면도 함께 초기화됩니다. 같이 다시 시작하시겠습니까?')) {
                 return;
             }
         }
         const newSeed = Math.floor(Math.random() * 900000) + 100000;
         currentSeed = newSeed;
-        sendNetMsg('RESTART_REQ', { seed: newSeed, diff: currentDiff });
+        if (currentMode === 'duel') sendNetMsg('RESTART_REQ', { seed: newSeed, diff: currentDiff });
         initGame(false);
     }
 
@@ -712,8 +783,8 @@
 
         resetFriendBoard();
 
-        if (notify) sendNetMsg('RESTART_REQ', { seed: currentSeed, diff: currentDiff });
-        if (isBotActive) startBotAI();
+        if (notify && currentMode === 'duel') sendNetMsg('RESTART_REQ', { seed: currentSeed, diff: currentDiff });
+        if (isBotActive && currentMode === 'duel') startBotAI();
     }
 
     function resetFriendBoard() {
@@ -721,8 +792,6 @@
         friendBoardEl.innerHTML = '';
         friendGrid = createEmptyGrid();
         
-        // 봇 대결 시 봇 지뢰 배치도 초기화
-        let seedRunner = currentSeed;
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
                 friendGrid[r][c] = { row: r, col: c, isMine: false, revealed: false, state: 0, neighborMines: 0 };
@@ -803,7 +872,6 @@
             }
         }
 
-        // 봇의 지뢰도 동일 시드로 초기 배치
         placed = 0;
         seedRunner = currentSeed;
         while (placed < maxMines) {
@@ -855,13 +923,13 @@
         }
 
         if (cell.isMine) {
-            sendNetMsg('BOOM', { r, c });
+            if (currentMode === 'duel') sendNetMsg('BOOM', { r, c });
             triggerGameOver(false);
             return;
         }
 
         revealCell(r, c);
-        sendNetMsg('ACTION', { action: 'reveal', r, c, val: cell.neighborMines });
+        if (currentMode === 'duel') sendNetMsg('ACTION', { action: 'reveal', r, c, val: cell.neighborMines });
         updateMyProgress();
         checkWin();
     }
@@ -898,11 +966,11 @@
                 }
             });
 
-            sendNetMsg('ACTION', { action: 'chord', r, c });
+            if (currentMode === 'duel') sendNetMsg('ACTION', { action: 'chord', r, c });
             updateMyProgress();
 
             if (hitMine) {
-                sendNetMsg('BOOM', { r, c });
+                if (currentMode === 'duel') sendNetMsg('BOOM', { r, c });
                 triggerGameOver(false);
             } else {
                 checkWin();
@@ -927,7 +995,7 @@
 
         const remain = mines - myFlags;
         myMineCountEl.textContent = String(remain).padStart(3, '0');
-        sendNetMsg('ACTION', { action: 'flag', r, c, state: cell.state, remain: remain });
+        if (currentMode === 'duel') sendNetMsg('ACTION', { action: 'flag', r, c, state: cell.state, remain: remain });
     }
 
     function updateMyProgress() {
@@ -939,7 +1007,7 @@
         myProgressStat.textContent = `진행률: ${pct}%`;
 
         if (pct >= 100) {
-            sendNetMsg('WIN');
+            if (currentMode === 'duel') sendNetMsg('WIN');
             triggerGameOver(true, '🎉 축하합니다! 진행률 100% 달성으로 완벽 승리!');
         }
     }
@@ -980,7 +1048,6 @@
         }
     }
 
-    // --- 시각적 동작이 동기화되는 봇 AI ---
     function toggleBotMatch() {
         isBotActive = !isBotActive;
         const btn = document.getElementById('botToggleBtn');
@@ -1018,13 +1085,11 @@
         clearTimeout(botTimeout);
         startFriendTimer();
 
-        // 봇 클릭 대기 시간 (1.5초 ~ 2.2초 간격)
         const getHumanDelay = () => Math.floor(Math.random() * 700) + 1500;
 
         const botStep = () => {
             if (gameOver || !isBotActive) return;
 
-            // 아직 열리지 않은 칸 목록 추출
             let unrevealed = [];
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
@@ -1034,10 +1099,8 @@
 
             if (unrevealed.length === 0) return;
 
-            // 랜덤으로 1칸 선택
             const target = unrevealed[Math.floor(Math.random() * unrevealed.length)];
 
-            // 지뢰 클릭 시 봇 폭발
             if (target.isMine) {
                 const el = getFriendCellEl(target.row, target.col);
                 if (el) {
@@ -1049,7 +1112,6 @@
                 return;
             }
 
-            // 안전 구역 클릭 시 전파 연출
             revealFriendCellCascade(target.row, target.col);
 
             let friendRev = friendBoardEl.querySelectorAll('.cell.revealed').length;
@@ -1091,7 +1153,7 @@
             for (let c = 0; c < cols; c++) if (myGrid[r][c].revealed) rev++;
         }
         if (rev === (rows * cols - mines)) {
-            sendNetMsg('WIN');
+            if (currentMode === 'duel') sendNetMsg('WIN');
             triggerGameOver(true, '🎉 축하합니다! 모든 지뢰를 완벽히 해제했습니다!');
         }
     }
@@ -1172,8 +1234,12 @@
         if (e.key === 'Escape') toggleBossKey();
     });
 
-    initGame(false);
-    initNetwork();
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('room')) {
+        selectPlayMode('duel');
+    } else {
+        selectPlayMode('single');
+    }
 </script>
 </body>
 </html>
