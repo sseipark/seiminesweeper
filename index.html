@@ -3,13 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>파스텔 지뢰찾기 배틀</title>
+    <title>파스텔 지뢰찾기 - 챌린지</title>
 
     <!-- 브라우저 탭 아이콘(파비콘) 설정 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💣</text></svg>">
-
-    <!-- WebRTC 실시간 P2P 연결 라이브러리 (PeerJS) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
 
     <style>
         :root {
@@ -125,8 +122,8 @@
         .color-dot:hover { transform: scale(1.15); }
         .color-dot.active { border-color: var(--text-color); transform: scale(1.15); }
 
-        /* 1:1 배틀 모드 패널 */
-        .battle-panel {
+        /* 챌린지 공유 패널 */
+        .challenge-panel {
             width: 100%;
             background: var(--cell-revealed);
             border: 1px solid var(--border-color);
@@ -134,65 +131,32 @@
             padding: 8px 12px;
             margin-bottom: 10px;
             display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .battle-controls {
-            display: flex;
             align-items: center;
-            gap: 6px;
             justify-content: space-between;
-        }
-
-        .battle-input {
-            width: 70px;
-            padding: 4px 6px;
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
-            text-align: center;
-            font-weight: 800;
             font-size: 11px;
-            text-transform: uppercase;
+            font-weight: 700;
         }
 
-        .battle-btn {
-            padding: 4px 8px;
-            border-radius: 6px;
+        .challenge-btn {
+            padding: 5px 10px;
+            border-radius: 8px;
             border: none;
             background-color: var(--primary);
             color: #fff;
             font-weight: 700;
             cursor: pointer;
             font-size: 11px;
+            transition: background-color 0.2s;
         }
 
-        .battle-btn:hover { background-color: var(--primary-hover); }
+        .challenge-btn:hover { background-color: var(--primary-hover); }
 
-        .battle-status-bar {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 11px;
-            font-weight: 700;
-        }
-
-        .progress-track {
-            flex: 1;
-            height: 8px;
-            background: var(--cell-bg);
-            border-radius: 4px;
-            margin: 0 8px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .progress-fill {
-            height: 100%;
+        .challenge-tag {
             background: var(--primary);
-            width: 0%;
-            transition: width 0.2s ease;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
         }
 
         /* Difficulty Selector Bar */
@@ -421,7 +385,7 @@
 
         body.stealth-mode .difficulty-bar,
         body.stealth-mode .best-record-banner,
-        body.stealth-mode .battle-panel,
+        body.stealth-mode .challenge-panel,
         body.stealth-mode .app-header {
             display: none !important;
         }
@@ -572,7 +536,7 @@
     <!-- Header -->
     <div class="app-header">
         <div class="title-box">
-            <div class="app-title">Minesweeper Battle</div>
+            <div class="app-title">Minesweeper Challenge</div>
             <button class="icon-tool-btn" id="soundToggleBtn" onclick="toggleSound()" title="사운드 켜기/끄기">🔊</button>
             <button class="icon-tool-btn" onclick="toggleStealthMode()" title="몰컴 미니 모드">🕶️</button>
             <button class="icon-tool-btn" onclick="toggleBossKey()" title="보스 키 (단축키: ESC)">📑</button>
@@ -586,21 +550,10 @@
         </div>
     </div>
 
-    <!-- 1:1 온라인 배틀 컨트롤러 -->
-    <div class="battle-panel">
-        <div class="battle-controls">
-            <span>⚔️ 1:1 배틀</span>
-            <div>
-                <button class="battle-btn" onclick="createBattleRoom()">방 만들기</button>
-                <input type="text" id="joinCodeInput" class="battle-input" placeholder="코드4자리" maxlength="4">
-                <button class="battle-btn" onclick="joinBattleRoom()">참가</button>
-            </div>
-        </div>
-        <div class="battle-status-bar" id="battleStatusBar" style="display: none;">
-            <span>내 진행률</span>
-            <div class="progress-track"><div class="progress-fill" id="myProgressBar"></div></div>
-            <span id="opponentStatus">상대방 대기 중...</span>
-        </div>
+    <!-- 챌린지 링크 공유 패널 -->
+    <div class="challenge-panel">
+        <span id="challengeStatus">⚔️ 친구와 같은 지뢰밭 겨루기</span>
+        <button class="challenge-btn" onclick="copyChallengeLink()">🔗 챌린지 링크 복사</button>
     </div>
 
     <!-- Difficulty Tabs -->
@@ -612,7 +565,7 @@
 
     <!-- Best Record Badge -->
     <div class="best-record-banner">
-        <span>🏆 싱글 최단 기록</span>
+        <span>🏆 최단 클리어 기록</span>
         <span class="best-record-val" id="bestRecordVal">기록 없음</span>
     </div>
 
@@ -653,107 +606,33 @@
 </div>
 
 <script>
-    // --- PeerJS WebRTC P2P 배틀 통신 엔진 ---
-    let peer = null;
-    let peerConn = null;
-    let isBattleMode = false;
-    let isHost = false;
-    let sharedSeed = null;
+    // --- 챌린지 시드 & 난이도 URL 파라미터 제어 ---
+    let currentSeed = null;
 
-    function generateRandomCode() {
-        return Math.random().toString(36).substring(2, 6).toUpperCase();
+    function getUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        return {
+            seed: params.get('seed'),
+            diff: params.get('diff')
+        };
     }
 
-    function initPeer(customId = null) {
-        if (peer) peer.destroy();
-        peer = customId ? new Peer(customId) : new Peer();
-
-        peer.on('open', (id) => {
-            if (isHost) {
-                document.getElementById('opponentStatus').textContent = `방 코드: ${id} (상대 접속 대기 중)`;
-            }
-        });
-
-        peer.on('connection', (conn) => {
-            peerConn = conn;
-            setupPeerListeners();
-            if (isHost) {
-                // 방장이 접속자에게 같은 난이도 및 지뢰 시드 송신
-                sharedSeed = Math.floor(Math.random() * 1000000);
-                peerConn.send({
-                    type: 'START_GAME',
-                    diff: currentDiff,
-                    seed: sharedSeed
-                });
-                document.getElementById('opponentStatus').textContent = '상대방 연결됨! 배틀 시작!';
-                initGame(false);
-            }
-        });
-
-        peer.on('error', (err) => {
-            alert('배틀 연결 오류: 방 코드를 다시 확인해주세요.');
-        });
+    function generateNewSeed() {
+        return Math.floor(Math.random() * 899999) + 100000;
     }
 
-    function setupPeerListeners() {
-        peerConn.on('data', (data) => {
-            if (data.type === 'START_GAME') {
-                currentDiff = data.diff;
-                sharedSeed = data.seed;
-                document.getElementById('opponentStatus').textContent = '배틀 시작! 누가 먼저 이길까?';
-                initGame(false);
-            } else if (data.type === 'PROGRESS') {
-                document.getElementById('opponentStatus').textContent = `상대: ${data.progress}% 진행 중`;
-            } else if (data.type === 'BOOM') {
-                triggerGameOver(true, '💥 상대방이 지뢰를 밟고 폭발했습니다! 당신의 승리!');
-            } else if (data.type === 'WIN') {
-                triggerGameOver(false, '😭 상대방이 먼저 지뢰를 다 찾았습니다. 패배!');
-            }
-        });
-    }
-
-    function createBattleRoom() {
-        const roomCode = generateRandomCode();
-        isBattleMode = true;
-        isHost = true;
-        document.getElementById('battleStatusBar').style.display = 'flex';
-        initPeer(roomCode);
-    }
-
-    function joinBattleRoom() {
-        const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
-        if (!code || code.length !== 4) {
-            alert('4자리 방 코드를 입력해주세요!');
-            return;
-        }
-        isBattleMode = true;
-        isHost = false;
-        document.getElementById('battleStatusBar').style.display = 'flex';
-        document.getElementById('opponentStatus').textContent = '방에 접속 중...';
+    function copyChallengeLink() {
+        if (!currentSeed) currentSeed = generateNewSeed();
+        const baseUrl = window.location.origin + window.location.pathname;
+        const challengeUrl = `${baseUrl}?diff=${currentDiff}&seed=${currentSeed}`;
         
-        initPeer();
-        setTimeout(() => {
-            peerConn = peer.connect(code);
-            setupPeerListeners();
-        }, 500);
+        navigator.clipboard.writeText(challengeUrl).then(() => {
+            alert('⚔️ 챌린지 링크가 복사되었습니다!\n친구에게 카톡으로 보내서 대결해보세요.');
+        }).catch(() => {
+            prompt('아래 주소를 복사하여 친구에게 전달하세요:', challengeUrl);
+        });
     }
 
-    function sendBattleProgress() {
-        if (!isBattleMode || !peerConn) return;
-        let revealedCount = 0;
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                if (grid[r][c].revealed) revealedCount++;
-            }
-        }
-        const totalSafe = (rows * cols - mines);
-        const progress = Math.floor((revealedCount / totalSafe) * 100);
-        
-        document.getElementById('myProgressBar').style.width = `${progress}%`;
-        peerConn.send({ type: 'PROGRESS', progress: progress });
-    }
-
-    // Pseudo-Random Generator (동일한 시드로 동일 지뢰 배치)
     function seededRandom(seed) {
         let x = Math.sin(seed++) * 10000;
         return x - Math.floor(x);
@@ -953,6 +832,7 @@
     const touchModeLabel = document.getElementById('touchModeLabel');
     const soundToggleBtn = document.getElementById('soundToggleBtn');
     const bossScreen = document.getElementById('bossScreen');
+    const challengeStatus = document.getElementById('challengeStatus');
 
     function openMiniWindow() {
         window.open(window.location.href, 'MiniMinesweeper', 'width=320,height=480,resizable=yes,scrollbars=no,status=no,location=no,toolbar=no,menubar=no');
@@ -1005,7 +885,7 @@
     function changeDifficulty(diff, el) {
         currentDiff = diff;
         document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
-        el.classList.add('active');
+        if (el) el.classList.add('active');
         updateBestRecordDisplay();
         initGame();
     }
@@ -1053,7 +933,7 @@
 
     window.addEventListener('resize', adjustBoardDimensions);
 
-    function initGame(resetBattle = true) {
+    function initGame() {
         clearInterval(timerInterval);
         timeElapsed = 0;
         isFirstClick = true;
@@ -1069,7 +949,6 @@
         timerEl.textContent = '000';
         mineCountEl.textContent = String(mines).padStart(3, '0');
         faceBtn.textContent = '😊';
-        document.getElementById('myProgressBar').style.width = '0%';
 
         boardEl.innerHTML = '';
         grid = [];
@@ -1116,17 +995,12 @@
         let placed = 0;
         const maxMines = Math.min(mines, (rows * cols) - safeCoords.size);
 
-        let seed = sharedSeed || Math.random();
+        if (!currentSeed) currentSeed = generateNewSeed();
+        let seedRunner = currentSeed;
 
         while (placed < maxMines) {
-            let r, c;
-            if (isBattleMode && sharedSeed) {
-                r = Math.floor(seededRandom(seed++) * rows);
-                c = Math.floor(seededRandom(seed++) * cols);
-            } else {
-                r = Math.floor(Math.random() * rows);
-                c = Math.floor(Math.random() * cols);
-            }
+            const r = Math.floor(seededRandom(seedRunner++) * rows);
+            const c = Math.floor(seededRandom(seedRunner++) * cols);
 
             const key = `${r},${c}`;
             if (!grid[r][c].isMine && !safeCoords.has(key)) {
@@ -1171,7 +1045,6 @@
         }
 
         if (cell.isMine) {
-            if (isBattleMode && peerConn) peerConn.send({ type: 'BOOM' });
             triggerGameOver(false);
             return;
         }
@@ -1179,7 +1052,6 @@
         sound.playPop();
         triggerHaptic('tap');
         revealCell(r, c);
-        sendBattleProgress();
         checkWin();
     }
 
@@ -1200,12 +1072,10 @@
             });
 
             if (hitMine) {
-                if (isBattleMode && peerConn) peerConn.send({ type: 'BOOM' });
                 triggerGameOver(false);
             } else {
                 sound.playPop();
                 triggerHaptic('tap');
-                sendBattleProgress();
                 checkWin();
             }
         }
@@ -1259,12 +1129,11 @@
         }
 
         if (revealedCount === (rows * cols - mines)) {
-            if (isBattleMode && peerConn) peerConn.send({ type: 'WIN' });
             triggerGameOver(true);
         }
     }
 
-    function triggerGameOver(isWin, customMsg = null) {
+    function triggerGameOver(isWin) {
         gameOver = true;
         clearInterval(timerInterval);
 
@@ -1274,8 +1143,8 @@
             overlayTitle.className = 'overlay-title win';
             
             const isNewBest = saveBestRecord(timeElapsed);
-            let desc = customMsg || `${timeElapsed}초 만에 모든 지뢰를 완벽히 찾아냈습니다!`;
-            if (isNewBest && !customMsg) desc += '<br>🌟 축하합니다! 최고 기록 경신!';
+            let desc = `${timeElapsed}초 만에 모든 지뢰를 완벽히 찾아냈습니다!`;
+            if (isNewBest) desc += '<br>🌟 축하합니다! 최고 기록 경신!';
             overlayDesc.innerHTML = desc;
 
             for (let r = 0; r < rows; r++) {
@@ -1292,7 +1161,7 @@
             faceBtn.textContent = '😵';
             overlayTitle.textContent = '💥 펑!';
             overlayTitle.className = 'overlay-title fail';
-            overlayDesc.innerHTML = customMsg || '지뢰를 밟았습니다.<br>다시 도전해보세요!';
+            overlayDesc.innerHTML = '지뢰를 밟았습니다.<br>다시 도전해보세요!';
 
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
@@ -1316,6 +1185,19 @@
         if (e.key === 'r' || e.key === 'R' || e.key === 'F2') initGame();
         if (e.key === 'Escape') toggleBossKey();
     });
+
+    // 초기에 URL 매개변수가 있으면 매칭 설정
+    const params = getUrlParams();
+    if (params.seed) {
+        currentSeed = parseInt(params.seed);
+        if (params.diff && config[params.diff]) {
+            currentDiff = params.diff;
+            document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+            const targetBtn = Array.from(document.querySelectorAll('.diff-btn')).find(b => b.textContent.includes(params.diff === 'easy' ? '초급' : params.diff === 'medium' ? '중급' : '고급'));
+            if (targetBtn) targetBtn.classList.add('active');
+        }
+        challengeStatus.innerHTML = '⚔️ <span class="challenge-tag">챌린지 모드</span> 전달받은 지뢰밭 대결 중!';
+    }
 
     initGame();
 </script>
