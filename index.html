@@ -1,36 +1,1105 @@
-function startBotAI() {
-    clearInterval(botInterval);
-    startFriendTimer();
-    
-    // 봇 클릭 속도 완화 (1.8초 ~ 2.5초 간격 랜덤)
-    const getHumanDelay = () => Math.floor(Math.random() * 700) + 1800;
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>파스텔 지뢰찾기 - 실시간 라이브 배틀</title>
 
-    const botStep = () => {
-        if (gameOver || !isBotActive) return;
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💣</text></svg>">
 
-        // 봇의 실수 확률 (12% 확률로 지뢰 밟고 펑)
-        const isError = Math.random() < 0.12;
+    <!-- 무료 공용 웹소켓 MQTT 라이브러리 (안정적인 실시간 1:1 화면 동기화) -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-        if (isError) {
-            applyFriendAction({ action: 'boom' });
-            triggerGameOver(true, '🎉 봇이 지뢰를 밟고 폭발했습니다! 나의 승리!');
-            return;
+    <style>
+        :root {
+            --bg-color: #f3f0ff;
+            --main-bg: #ffffff;
+            --primary: #a78bfa;
+            --primary-hover: #8b5cf6;
+            --text-color: #4b5563;
+            --cell-bg: #ede9fe;
+            --cell-hover: #ddd6fe;
+            --cell-revealed: #f5f3ff;
+            --border-color: #ddd6fe;
+            --friend-primary: #f472b6;
+            --friend-cell-bg: #fce7f3;
+            --friend-cell-rev: #fff1f2;
         }
 
-        // 인간미 있는 느릿한 진행률 상승
-        let currentPct = parseInt(friendProgressStat.textContent.replace(/[^0-9]/g, '')) || 0;
-        let nextPct = Math.min(100, currentPct + Math.floor(Math.random() * 8) + 3);
-        
-        friendProgressStat.textContent = `진행률: ${nextPct}%`;
-
-        if (nextPct >= 100) {
-            friendFaceBtn.textContent = '😎';
-            triggerGameOver(false, '😭 봇이 먼저 진행률 100%를 달성했습니다! 패배!');
-            return;
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
 
-        botInterval = setTimeout(botStep, getHumanDelay());
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 8px;
+            transition: background-color 0.3s ease;
+            overflow-x: hidden;
+        }
+
+        #confettiCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .app-card {
+            background-color: var(--main-bg);
+            width: 100%;
+            max-width: 960px;
+            border-radius: 24px;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+            transition: max-width 0.3s ease;
+        }
+
+        .app-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .title-box {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .app-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text-color);
+            letter-spacing: -0.5px;
+        }
+
+        .icon-tool-btn {
+            background: none;
+            border: none;
+            font-size: 15px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s ease, background-color 0.2s;
+        }
+
+        .icon-tool-btn:hover { background-color: rgba(0,0,0,0.05); }
+
+        .theme-selector {
+            display: flex;
+            gap: 5px;
+            background: rgba(0, 0, 0, 0.03);
+            padding: 3px 6px;
+            border-radius: 20px;
+        }
+
+        .color-dot {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+        }
+
+        .color-dot:hover { transform: scale(1.15); }
+        .color-dot.active { border-color: var(--text-color); transform: scale(1.15); }
+
+        .battle-control-bar {
+            width: 100%;
+            background: var(--cell-revealed);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .battle-btn-group {
+            display: flex;
+            gap: 6px;
+        }
+
+        .action-chip-btn {
+            padding: 5px 10px;
+            border-radius: 8px;
+            border: none;
+            background-color: var(--primary);
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 11px;
+            transition: background-color 0.2s;
+        }
+
+        .action-chip-btn:hover { background-color: var(--primary-hover); }
+        .action-chip-btn.secondary { background-color: #94a3b8; }
+
+        .battle-status-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+        }
+
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background-color: #cbd5e1;
+        }
+        .status-dot.online { background-color: #22c55e; }
+
+        .battle-arena {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .screen-column {
+            flex: 1;
+            max-width: 440px;
+            background: rgba(0,0,0,0.015);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        .screen-column.friend-col {
+            border-color: #fbcfe8;
+            background: #fff5f7;
+        }
+
+        .player-badge {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            padding: 0 4px;
+        }
+
+        .player-badge .name {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .player-badge .stat {
+            font-size: 11px;
+            opacity: 0.75;
+        }
+
+        .status-dashboard {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--cell-revealed);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 6px 14px;
+            margin-bottom: 10px;
+        }
+
+        .friend-col .status-dashboard {
+            background-color: #fff1f2;
+            border-color: #fbcfe8;
+        }
+
+        .status-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .status-label {
+            font-size: 9px;
+            font-weight: 600;
+            opacity: 0.6;
+        }
+
+        .status-val {
+            font-size: 16px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .face-btn {
+            font-size: 20px;
+            background: #ffffff;
+            border: none;
+            border-radius: 50%;
+            width: 34px; height: 34px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .board-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            max-height: 52vh;
+            padding: 2px;
+            border-radius: 8px;
+        }
+
+        .board {
+            display: grid;
+            gap: 3px;
+            margin: auto;
+        }
+
+        .cell {
+            background-color: var(--cell-bg);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.1s ease, background-color 0.12s;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+            line-height: 1;
+        }
+
+        .friend-col .cell {
+            background-color: var(--friend-cell-bg);
+            cursor: default;
+        }
+
+        .cell.revealed {
+            background-color: var(--cell-revealed);
+            box-shadow: none;
+            cursor: default;
+        }
+
+        .friend-col .cell.revealed {
+            background-color: var(--friend-cell-rev);
+        }
+
+        .cell.mine {
+            background-color: #fca5a5 !important;
+            color: #ffffff;
+        }
+
+        .c-1 { color: #60a5fa; }
+        .c-2 { color: #34d399; }
+        .c-3 { color: #f87171; }
+        .c-4 { color: #818cf8; }
+        .c-5 { color: #fb923c; }
+        .c-6 { color: #2dd4bf; }
+
+        .difficulty-bar {
+            display: flex;
+            width: 100%;
+            background-color: var(--cell-bg);
+            border-radius: 10px;
+            padding: 3px;
+            margin-bottom: 8px;
+        }
+
+        .diff-btn {
+            flex: 1;
+            padding: 6px 0;
+            border: none;
+            background: transparent;
+            color: var(--text-color);
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .diff-btn.active {
+            background-color: #ffffff;
+            color: var(--primary-hover);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        }
+
+        .action-bar {
+            width: 100%;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 8px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background-color: #ffffff;
+            color: var(--text-color);
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover { border-color: var(--primary); color: var(--primary-hover); }
+        .mode-toggle-btn.flag-active { background-color: var(--primary); color: #ffffff; }
+
+        body.stealth-mode { padding: 0; background-color: #ffffff; }
+        body.stealth-mode .app-card { box-shadow: none; border-radius: 0; padding: 4px; max-width: 100vw; height: 100vh; justify-content: center; }
+        body.stealth-mode .difficulty-bar, body.stealth-mode .battle-control-bar, body.stealth-mode .app-header { display: none !important; }
+        body.stealth-mode .status-dashboard { padding: 3px 8px; margin-bottom: 4px; border-radius: 6px; }
+        body.stealth-mode .face-btn { width: 26px; height: 26px; font-size: 14px; }
+        body.stealth-mode .status-val { font-size: 13px; }
+        body.stealth-mode .board-wrapper { margin-bottom: 4px; max-height: 78vh; }
+        body.stealth-mode .action-btn { padding: 4px; font-size: 10px; }
+
+        #bossScreen { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #ffffff; z-index: 9999; font-family: 'Malgun Gothic', sans-serif; color: #000000; cursor: pointer; overflow: auto; }
+        #bossScreen.active { display: block; }
+        .excel-ribbon { background-color: #107c41; color: #fff; padding: 8px 16px; font-size: 12px; font-weight: bold; }
+        .excel-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .excel-table th, .excel-table td { border: 1px solid #d4d4d4; padding: 4px 8px; }
+        .excel-table th { background: #f3f3f3; }
+
+        .game-over-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(6px);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 10;
+        }
+        .game-over-overlay.active { opacity: 1; pointer-events: auto; }
+        .overlay-title { font-size: 26px; font-weight: 800; margin-bottom: 6px; }
+        .overlay-title.win { color: var(--primary-hover); }
+        .overlay-title.fail { color: #ef4444; }
+        .overlay-desc { font-size: 13px; color: var(--text-color); margin-bottom: 18px; text-align: center; padding: 0 16px; line-height: 1.4; }
+        .restart-app-btn {
+            background-color: var(--primary);
+            color: #fff; border: none; padding: 10px 22px;
+            font-size: 13px; font-weight: 700; border-radius: 12px; cursor: pointer;
+        }
+
+        @media (max-width: 720px) {
+            .battle-arena { flex-direction: column; align-items: center; }
+            .screen-column { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="confettiCanvas"></canvas>
+
+<div id="bossScreen" onclick="toggleBossKey()">
+    <div class="excel-ribbon">Microsoft Excel - 2026_상반기_재무보고서.xlsx</div>
+    <div style="padding: 12px;">
+        <table class="excel-table">
+            <tr><th>코드</th><th>구분</th><th>예산</th><th>집행액</th></tr>
+            <tr><td>A101</td><td>서버운영비</td><td>45,000,000</td><td>42,100,000</td></tr>
+            <tr><td>B204</td><td>인건비</td><td>120,000,000</td><td>118,500,000</td></tr>
+        </table>
+    </div>
+</div>
+
+<div class="app-card">
+    <!-- Header -->
+    <div class="app-header">
+        <div class="title-box">
+            <div class="app-title">Minesweeper Duo</div>
+            <button class="icon-tool-btn" id="soundToggleBtn" onclick="toggleSound()">🔊</button>
+            <button class="icon-tool-btn" onclick="toggleBossKey()">📑</button>
+            <button class="icon-tool-btn" onclick="openMiniWindow()">📱</button>
+        </div>
+        <div class="theme-selector">
+            <div class="color-dot active" style="background-color: #a78bfa;" onclick="setTheme('purple', this)"></div>
+            <div class="color-dot" style="background-color: #f472b6;" onclick="setTheme('pink', this)"></div>
+            <div class="color-dot" style="background-color: #34d399;" onclick="setTheme('mint', this)"></div>
+            <div class="color-dot" style="background-color: #9ca3af;" onclick="setTheme('gray', this)"></div>
+        </div>
+    </div>
+
+    <!-- 1:1 라이브 배틀 컨트롤 바 -->
+    <div class="battle-control-bar">
+        <div class="battle-status-tag">
+            <span class="status-dot" id="netStatusDot"></span>
+            <span id="netStatusText">연결 대기 중...</span>
+        </div>
+        <div class="battle-btn-group">
+            <button class="action-chip-btn" onclick="copyInviteLink()">⚔️ 실시간 배틀 초대 링크 복사</button>
+            <button class="action-chip-btn secondary" id="botToggleBtn" onclick="toggleBotMatch()">🤖 봇 대결</button>
+        </div>
+    </div>
+
+    <!-- 난이도 바 -->
+    <div class="difficulty-bar">
+        <button class="diff-btn active" onclick="changeDifficulty('easy', this)">초급 (9x9)</button>
+        <button class="diff-btn" onclick="changeDifficulty('medium', this)">중급 (12x12)</button>
+    </div>
+
+    <!-- 듀얼 스크린 아레나 (내 화면 VS 친구 화면) -->
+    <div class="battle-arena">
+        <!-- 내 화면 (좌측) -->
+        <div class="screen-column">
+            <div class="player-badge">
+                <span class="name">🎮 나 (Player 1)</span>
+                <span class="stat" id="myProgressStat">진행률: 0%</span>
+            </div>
+            <div class="status-dashboard">
+                <div class="status-box"><span class="status-label">MINES</span><span class="status-val" id="myMineCount">010</span></div>
+                <button class="face-btn" id="myFaceBtn" onclick="requestRestart()">😊</button>
+                <div class="status-box"><span class="status-label">TIME</span><span class="status-val" id="myTimer">000</span></div>
+            </div>
+            <div class="board-wrapper"><div id="myBoard" class="board"></div></div>
+        </div>
+
+        <!-- 친구 실시간 화면 (우측) -->
+        <div class="screen-column friend-col">
+            <div class="player-badge">
+                <span class="name" style="color: var(--friend-primary);">👀 친구 실시간 화면</span>
+                <span class="stat" id="friendProgressStat">대기 중...</span>
+            </div>
+            <div class="status-dashboard">
+                <div class="status-box"><span class="status-label">MINES</span><span class="status-val" id="friendMineCount">010</span></div>
+                <button class="face-btn" id="friendFaceBtn">😊</button>
+                <div class="status-box"><span class="status-label">TIME</span><span class="status-val" id="friendTimer">000</span></div>
+            </div>
+            <div class="board-wrapper"><div id="friendBoard" class="board"></div></div>
+        </div>
+    </div>
+
+    <!-- 하단 액션 버튼 -->
+    <div class="action-bar">
+        <button class="action-btn mode-toggle-btn" id="touchModeBtn" onclick="toggleTouchMode()">
+            <span id="touchModeIcon">⛏️</span> <span id="touchModeLabel">땅파기</span>
+        </button>
+        <button class="action-btn" onclick="requestRestart()">
+            🔄 함께 재시작 <span style="font-size:10px;opacity:0.6;">(R)</span>
+        </button>
+    </div>
+
+    <!-- 결과 오버레이 -->
+    <div class="game-over-overlay" id="gameOverOverlay">
+        <div class="overlay-title fail" id="overlayTitle">💥 펑!</div>
+        <div class="overlay-desc" id="overlayDesc">게임 오버!</div>
+        <button class="restart-app-btn" onclick="requestRestart()">다시 대결하기</button>
+    </div>
+</div>
+
+<script>
+    // --- 설정 및 상태 변수 ---
+    const config = {
+        easy: { rows: 9, cols: 9, mines: 10, cellSize: 30 },
+        medium: { rows: 12, cols: 12, mines: 22, cellSize: 24 }
     };
 
-    botInterval = setTimeout(botStep, getHumanDelay());
-}
+    let currentDiff = 'easy';
+    let rows = 9, cols = 9, mines = 10, cellSize = 30;
+    let myGrid = [], friendGrid = [];
+    let isFirstClick = true;
+    let gameOver = false;
+    let timerInterval = null, friendTimerInterval = null;
+    let timeElapsed = 0, friendTimeElapsed = 0;
+    let myFlags = 0, friendFlags = 0;
+    let isFlagTouchMode = false;
+
+    // 통신 상태
+    let roomCode = null;
+    let myId = 'user_' + Math.random().toString(36).substring(2, 7);
+    let mqttClient = null;
+    let isBotActive = false;
+    let botTimeout = null;
+    let currentSeed = 12345;
+    let isPeerOnline = false;
+
+    const myBoardEl = document.getElementById('myBoard');
+    const friendBoardEl = document.getElementById('friendBoard');
+    const myMineCountEl = document.getElementById('myMineCount');
+    const friendMineCountEl = document.getElementById('friendMineCount');
+    const myTimerEl = document.getElementById('myTimer');
+    const friendTimerEl = document.getElementById('friendTimer');
+    const myFaceBtn = document.getElementById('myFaceBtn');
+    const friendFaceBtn = document.getElementById('friendFaceBtn');
+    const netStatusDot = document.getElementById('netStatusDot');
+    const netStatusText = document.getElementById('netStatusText');
+    const myProgressStat = document.getElementById('myProgressStat');
+    const friendProgressStat = document.getElementById('friendProgressStat');
+    const overlayEl = document.getElementById('gameOverOverlay');
+    const overlayTitle = document.getElementById('overlayTitle');
+    const overlayDesc = document.getElementById('overlayDesc');
+
+    // --- 통신 연동 (MQTT 실시간) ---
+    function initNetwork() {
+        const urlParams = new URLSearchParams(window.location.search);
+        roomCode = urlParams.get('room');
+
+        if (!roomCode) {
+            roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const newUrl = window.location.pathname + '?room=' + roomCode;
+            window.history.replaceState(null, '', newUrl);
+        }
+
+        netStatusText.textContent = `방 코드 [${roomCode}] 접속 중...`;
+
+        try {
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+                clientId: myId,
+                clean: true,
+                keepalive: 10
+            });
+
+            mqttClient.on('connect', () => {
+                netStatusDot.classList.add('online');
+                netStatusText.textContent = `🟢 연결됨 (방: ${roomCode})`;
+                mqttClient.subscribe(`seimines/v3/${roomCode}/#`);
+
+                sendNetMsg('HELLO', { diff: currentDiff, seed: currentSeed });
+            });
+
+            mqttClient.on('message', (topic, payload) => {
+                try {
+                    const msg = JSON.parse(payload.toString());
+                    if (msg.sender === myId) return;
+
+                    handleRemoteMessage(msg);
+                } catch (e) {}
+            });
+        } catch (e) {
+            netStatusText.textContent = '솔로 모드';
+        }
+    }
+
+    function sendNetMsg(type, data = {}) {
+        if (!mqttClient || !mqttClient.connected) return;
+        data.type = type;
+        data.sender = myId;
+        mqttClient.publish(`seimines/v3/${roomCode}/msg`, JSON.stringify(data));
+    }
+
+    function handleRemoteMessage(msg) {
+        if (msg.type === 'HELLO') {
+            isPeerOnline = true;
+            friendProgressStat.textContent = '🟢 친구 접속 완료!';
+            sendNetMsg('SYNC_GAME', { diff: currentDiff, seed: currentSeed });
+        } else if (msg.type === 'SYNC_GAME') {
+            isPeerOnline = true;
+            friendProgressStat.textContent = '🟢 대결 진행 중';
+            if (currentSeed !== msg.seed || currentDiff !== msg.diff) {
+                currentSeed = msg.seed;
+                currentDiff = msg.diff;
+                initGame(false);
+            }
+        } else if (msg.type === 'ACTION') {
+            applyFriendAction(msg);
+        } else if (msg.type === 'RESTART_REQ') {
+            currentSeed = msg.seed;
+            currentDiff = msg.diff || currentDiff;
+            initGame(false);
+        } else if (msg.type === 'WIN') {
+            friendFaceBtn.textContent = '😎';
+            friendProgressStat.textContent = '진행률: 100%';
+            triggerGameOver(false, '😭 상대방이 먼저 모든 지뢰를 찾았습니다! 패배!');
+        } else if (msg.type === 'BOOM') {
+            friendFaceBtn.textContent = '😵';
+            if (msg.r !== undefined && msg.c !== undefined) {
+                const el = getFriendCellEl(msg.r, msg.c);
+                if (el) {
+                    el.classList.add('mine');
+                    el.textContent = '💣';
+                }
+            }
+            triggerGameOver(true, '🎉 상대방이 지뢰를 밟고 폭발했습니다! 나의 승리!');
+        }
+    }
+
+    function copyInviteLink() {
+        const fullUrl = window.location.origin + window.location.pathname + '?room=' + roomCode;
+        navigator.clipboard.writeText(fullUrl).then(() => {
+            alert(`⚔️ 실시간 배틀 초대 링크가 복사되었습니다!\n\n${fullUrl}\n\n친구에게 전달하면 내 옆 화면에 친구 플레이가 바로 생중계됩니다.`);
+        }).catch(() => {
+            prompt('아래 링크를 복사하여 친구에게 공유하세요:', fullUrl);
+        });
+    }
+
+    function requestRestart() {
+        if (isPeerOnline && !gameOver && !isFirstClick) {
+            if (!confirm('게임 진행 중에 재시작하면 친구의 화면도 함께 초기화됩니다. 같이 다시 시작하시겠습니까?')) {
+                return;
+            }
+        }
+        const newSeed = Math.floor(Math.random() * 900000) + 100000;
+        currentSeed = newSeed;
+        sendNetMsg('RESTART_REQ', { seed: newSeed, diff: currentDiff });
+        initGame(false);
+    }
+
+    function seededRandom(seed) {
+        let x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    }
+
+    function initGame(notify = true) {
+        clearInterval(timerInterval);
+        clearInterval(friendTimerInterval);
+        clearTimeout(botTimeout);
+        timeElapsed = 0; friendTimeElapsed = 0;
+        isFirstClick = true; gameOver = false;
+        myFlags = 0; friendFlags = 0;
+
+        overlayEl.classList.remove('active');
+        const setting = config[currentDiff];
+        rows = setting.rows; cols = setting.cols; mines = setting.mines; cellSize = setting.cellSize;
+
+        myMineCountEl.textContent = String(mines).padStart(3, '0');
+        friendMineCountEl.textContent = String(mines).padStart(3, '0');
+        myTimerEl.textContent = '000'; friendTimerEl.textContent = '000';
+        myFaceBtn.textContent = '😊'; friendFaceBtn.textContent = '😊';
+        myProgressStat.textContent = '진행률: 0%';
+
+        if (!currentSeed) currentSeed = Math.floor(Math.random() * 900000) + 100000;
+
+        myBoardEl.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+        myBoardEl.innerHTML = '';
+        myGrid = createEmptyGrid();
+        buildBoardDOM(myBoardEl, myGrid, true);
+
+        resetFriendBoard();
+
+        if (notify) sendNetMsg('RESTART_REQ', { seed: currentSeed, diff: currentDiff });
+        if (isBotActive) startBotAI();
+    }
+
+    function resetFriendBoard() {
+        friendBoardEl.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+        friendBoardEl.innerHTML = '';
+        friendGrid = createEmptyGrid();
+        buildBoardDOM(friendBoardEl, friendGrid, false);
+        friendMineCountEl.textContent = String(mines).padStart(3, '0');
+        friendTimerEl.textContent = '000';
+        friendFaceBtn.textContent = '😊';
+        friendProgressStat.textContent = isPeerOnline ? '🟢 대결 준비 완료' : (isBotActive ? '🤖 봇 준비 완료' : '대기 중...');
+    }
+
+    function createEmptyGrid() {
+        const g = [];
+        for (let r = 0; r < rows; r++) {
+            g[r] = [];
+            for (let c = 0; c < cols; c++) {
+                g[r][c] = { row: r, col: c, isMine: false, revealed: false, state: 0, neighborMines: 0 };
+            }
+        }
+        return g;
+    }
+
+    function buildBoardDOM(container, gridData, isInteractive) {
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const el = document.createElement('div');
+                el.classList.add('cell');
+                el.style.width = `${cellSize}px`;
+                el.style.height = `${cellSize}px`;
+                el.style.fontSize = `${Math.floor(cellSize * 0.55)}px`;
+
+                if (isInteractive) {
+                    el.addEventListener('click', () => {
+                        if (isFlagTouchMode) handleMyRightClick(r, c);
+                        else handleMyLeftClick(r, c);
+                    });
+                    el.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        handleMyRightClick(r, c);
+                    });
+                }
+                container.appendChild(el);
+            }
+        }
+    }
+
+    function placeMines(safeR, safeC) {
+        const safeCoords = new Set();
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                const nr = safeR + dr, nc = safeC + dc;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) safeCoords.add(`${nr},${nc}`);
+            }
+        }
+
+        let placed = 0;
+        let seedRunner = currentSeed;
+        const maxMines = Math.min(mines, (rows * cols) - safeCoords.size);
+
+        while (placed < maxMines) {
+            const r = Math.floor(seededRandom(seedRunner++) * rows);
+            const c = Math.floor(seededRandom(seedRunner++) * cols);
+            const key = `${r},${c}`;
+            if (!myGrid[r][c].isMine && !safeCoords.has(key)) {
+                myGrid[r][c].isMine = true;
+                placed++;
+            }
+        }
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (myGrid[r][c].isMine) continue;
+                let count = 0;
+                getNeighbors(myGrid, r, c).forEach(n => { if (n.isMine) count++; });
+                myGrid[r][c].neighborMines = count;
+            }
+        }
+    }
+
+    function getNeighbors(gridData, r, c) {
+        const list = [];
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                const nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) list.push(gridData[nr][nc]);
+            }
+        }
+        return list;
+    }
+
+    function handleMyLeftClick(r, c) {
+        if (gameOver) return;
+        const cell = myGrid[r][c];
+
+        if (cell.revealed) {
+            executeChording(r, c);
+            return;
+        }
+        if (cell.state === 1) return;
+
+        if (isFirstClick) {
+            isFirstClick = false;
+            placeMines(r, c);
+            startMyTimer();
+        }
+
+        if (cell.isMine) {
+            sendNetMsg('BOOM', { r, c });
+            triggerGameOver(false);
+            return;
+        }
+
+        revealCell(r, c);
+        sendNetMsg('ACTION', { action: 'reveal', r, c, val: cell.neighborMines });
+        updateMyProgress();
+        checkWin();
+    }
+
+    function revealCell(r, c) {
+        const cell = myGrid[r][c];
+        if (cell.revealed || cell.state === 1) return;
+
+        cell.revealed = true;
+        const el = getMyCellEl(r, c);
+        el.classList.add('revealed');
+        el.textContent = '';
+
+        if (cell.neighborMines > 0) {
+            el.textContent = cell.neighborMines;
+            el.classList.add(`c-${cell.neighborMines}`);
+        } else {
+            getNeighbors(myGrid, r, c).forEach(n => revealCell(n.row, n.col));
+        }
+    }
+
+    function executeChording(r, c) {
+        const cell = myGrid[r][c];
+        if (!cell.revealed || cell.neighborMines === 0) return;
+        const neighbors = getNeighbors(myGrid, r, c);
+        const flaggedCount = neighbors.filter(n => n.state === 1).length;
+
+        if (flaggedCount === cell.neighborMines) {
+            let hitMine = false;
+            neighbors.forEach(n => {
+                if (!n.revealed && n.state !== 1) {
+                    if (n.isMine) hitMine = true;
+                    else revealCell(n.row, n.col);
+                }
+            });
+
+            sendNetMsg('ACTION', { action: 'chord', r, c });
+            updateMyProgress();
+
+            if (hitMine) {
+                sendNetMsg('BOOM', { r, c });
+                triggerGameOver(false);
+            } else {
+                checkWin();
+            }
+        }
+    }
+
+    function handleMyRightClick(r, c) {
+        if (gameOver || isFirstClick) return;
+        const cell = myGrid[r][c];
+        if (cell.revealed) return;
+
+        const el = getMyCellEl(r, c);
+
+        if (cell.state === 0) {
+            cell.state = 1; el.textContent = '🚩'; myFlags++;
+        } else if (cell.state === 1) {
+            cell.state = 2; el.textContent = '❓'; myFlags--;
+        } else {
+            cell.state = 0; el.textContent = '';
+        }
+
+        const remain = mines - myFlags;
+        myMineCountEl.textContent = String(remain).padStart(3, '0');
+        sendNetMsg('ACTION', { action: 'flag', r, c, state: cell.state, remain: remain });
+    }
+
+    function updateMyProgress() {
+        let rev = 0;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) if (myGrid[r][c].revealed) rev++;
+        }
+        const pct = Math.floor((rev / (rows * cols - mines)) * 100);
+        myProgressStat.textContent = `진행률: ${pct}%`;
+
+        if (pct >= 100) {
+            sendNetMsg('WIN');
+            triggerGameOver(true, '🎉 축하합니다! 진행률 100% 달성으로 완벽 승리!');
+        }
+    }
+
+    function applyFriendAction(msg) {
+        const el = getFriendCellEl(msg.r, msg.c);
+
+        if (!friendTimerInterval) startFriendTimer();
+
+        if (msg.action === 'reveal' && el) {
+            el.classList.add('revealed');
+            if (msg.val > 0) {
+                el.textContent = msg.val;
+                el.classList.add(`c-${msg.val}`);
+            } else {
+                el.textContent = '';
+            }
+        } else if (msg.action === 'flag' && el) {
+            if (msg.state === 1) el.textContent = '🚩';
+            else if (msg.state === 2) el.textContent = '❓';
+            else el.textContent = '';
+
+            if (msg.remain !== undefined) {
+                friendMineCountEl.textContent = String(msg.remain).padStart(3, '0');
+            }
+        }
+
+        let friendRev = friendBoardEl.querySelectorAll('.cell.revealed').length;
+        const pct = Math.min(100, Math.floor((friendRev / (rows * cols - mines)) * 100));
+        friendProgressStat.textContent = `진행률: ${pct}%`;
+
+        if (pct >= 100) {
+            friendFaceBtn.textContent = '😎';
+            triggerGameOver(false, '😭 상대방이 진행률 100%를 먼저 달성했습니다! 패배!');
+        }
+    }
+
+    // --- 인간미 있는 봇 AI ---
+    function toggleBotMatch() {
+        isBotActive = !isBotActive;
+        const btn = document.getElementById('botToggleBtn');
+        if (isBotActive) {
+            btn.textContent = '🛑 봇 중지';
+            friendProgressStat.textContent = '🤖 초보 봇 대전 진행 중';
+            startBotAI();
+        } else {
+            btn.textContent = '🤖 봇 대결';
+            clearTimeout(botTimeout);
+            resetFriendBoard();
+        }
+    }
+
+    function startBotAI() {
+        clearTimeout(botTimeout);
+        startFriendTimer();
+
+        const getHumanDelay = () => Math.floor(Math.random() * 700) + 1800; // 1.8초 ~ 2.5초 간격
+
+        const botStep = () => {
+            if (gameOver || !isBotActive) return;
+
+            // 10% 확률로 봇이 실수해서 폭발
+            const isError = Math.random() < 0.10;
+
+            if (isError) {
+                friendFaceBtn.textContent = '😵';
+                triggerGameOver(true, '🎉 봇이 실수로 지뢰를 밟고 폭발했습니다! 나의 승리!');
+                return;
+            }
+
+            let currentPct = parseInt(friendProgressStat.textContent.replace(/[^0-9]/g, '')) || 0;
+            let nextPct = Math.min(100, currentPct + Math.floor(Math.random() * 8) + 3);
+            
+            friendProgressStat.textContent = `진행률: ${nextPct}%`;
+
+            if (nextPct >= 100) {
+                friendFaceBtn.textContent = '😎';
+                triggerGameOver(false, '😭 봇이 먼저 진행률 100%를 달성했습니다! 패배!');
+                return;
+            }
+
+            botTimeout = setTimeout(botStep, getHumanDelay());
+        };
+
+        botTimeout = setTimeout(botStep, getHumanDelay());
+    }
+
+    function startMyTimer() {
+        timerInterval = setInterval(() => {
+            timeElapsed++;
+            if (timeElapsed > 999) timeElapsed = 999;
+            myTimerEl.textContent = String(timeElapsed).padStart(3, '0');
+        }, 1000);
+    }
+
+    function startFriendTimer() {
+        clearInterval(friendTimerInterval);
+        friendTimerInterval = setInterval(() => {
+            friendTimeElapsed++;
+            if (friendTimeElapsed > 999) friendTimeElapsed = 999;
+            friendTimerEl.textContent = String(friendTimeElapsed).padStart(3, '0');
+        }, 1000);
+    }
+
+    function checkWin() {
+        let rev = 0;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) if (myGrid[r][c].revealed) rev++;
+        }
+        if (rev === (rows * cols - mines)) {
+            sendNetMsg('WIN');
+            triggerGameOver(true, '🎉 축하합니다! 모든 지뢰를 완벽히 해제했습니다!');
+        }
+    }
+
+    function triggerGameOver(isWin, msg) {
+        gameOver = true;
+        clearInterval(timerInterval);
+        clearInterval(friendTimerInterval);
+        clearTimeout(botTimeout);
+
+        myFaceBtn.textContent = isWin ? '😎' : '😵';
+        overlayTitle.textContent = isWin ? '🏆 승리!' : '💥 패배!';
+        overlayTitle.className = isWin ? 'overlay-title win' : 'overlay-title fail';
+        overlayDesc.innerHTML = msg || (isWin ? '모든 지뢰를 찾았습니다!' : '지뢰를 밟았습니다!');
+
+        if (!isWin) {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (myGrid[r][c].isMine) {
+                        const el = getMyCellEl(r, c);
+                        el.classList.add('mine'); el.textContent = '💣';
+                    }
+                }
+            }
+        }
+        setTimeout(() => overlayEl.classList.add('active'), 500);
+    }
+
+    function getMyCellEl(r, c) { return myBoardEl.children[r * cols + c]; }
+    function getFriendCellEl(r, c) { return friendBoardEl.children[r * cols + c]; }
+
+    function toggleTouchMode() {
+        isFlagTouchMode = !isFlagTouchMode;
+        const btn = document.getElementById('touchModeBtn');
+        if (isFlagTouchMode) {
+            btn.classList.add('flag-active');
+            document.getElementById('touchModeIcon').textContent = '🚩';
+            document.getElementById('touchModeLabel').textContent = '깃발';
+        } else {
+            btn.classList.remove('flag-active');
+            document.getElementById('touchModeIcon').textContent = '⛏️';
+            document.getElementById('touchModeLabel').textContent = '땅파기';
+        }
+    }
+
+    function changeDifficulty(diff, el) {
+        currentDiff = diff;
+        document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+        if (el) el.classList.add('active');
+        requestRestart();
+    }
+
+    function setTheme(name, el) {
+        const t = {
+            purple: { bg: '#f3f0ff', primary: '#a78bfa', hover: '#8b5cf6', cellBg: '#ede9fe', cellRev: '#f5f3ff', border: '#ddd6fe' },
+            pink:   { bg: '#fdf2f8', primary: '#f472b6', hover: '#ec4899', cellBg: '#fce7f3', cellRev: '#fff1f2', border: '#fbcfe8' },
+            mint:   { bg: '#ecfdf5', primary: '#34d399', hover: '#10b981', cellBg: '#d1fae5', cellRev: '#f0fdf4', border: '#a7f3d0' },
+            gray:   { bg: '#f3f4f6', primary: '#9ca3af', hover: '#4b5563', cellBg: '#e5e7eb', cellRev: '#f9fafb', border: '#d1d5db' }
+        }[name];
+        const r = document.documentElement;
+        r.style.setProperty('--bg-color', t.bg);
+        r.style.setProperty('--primary', t.primary);
+        r.style.setProperty('--primary-hover', t.hover);
+        r.style.setProperty('--cell-bg', t.cellBg);
+        r.style.setProperty('--cell-revealed', t.cellRev);
+        r.style.setProperty('--border-color', t.border);
+
+        document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
+        if (el) el.classList.add('active');
+    }
+
+    function toggleBossKey() { document.getElementById('bossScreen').classList.toggle('active'); }
+    function openMiniWindow() { window.open(window.location.href, 'MiniMinesweeper', 'width=780,height=520,resizable=yes'); }
+    function toggleSound() {}
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'r' || e.key === 'R') requestRestart();
+        if (e.key === 'Escape') toggleBossKey();
+    });
+
+    initGame(false);
+    initNetwork();
+</script>
+</body>
+</html>
