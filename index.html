@@ -7,7 +7,7 @@
 
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💣</text></svg>">
 
-    <!-- 무료 공용 웹소켓 MQTT 라이브러리 (안정적인 실시간 1:1 화면 동기화) -->
+    <!-- 무료 공용 웹소켓 MQTT 라이브러리 -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
     <style>
@@ -476,10 +476,11 @@
         </div>
     </div>
 
-    <!-- 난이도 바 -->
+    <!-- 난이도 바 (초급 / 중급 / 고급 모두 복구) -->
     <div class="difficulty-bar">
         <button class="diff-btn active" onclick="changeDifficulty('easy', this)">초급 (9x9)</button>
         <button class="diff-btn" onclick="changeDifficulty('medium', this)">중급 (12x12)</button>
+        <button class="diff-btn" onclick="changeDifficulty('hard', this)">고급 (14x14)</button>
     </div>
 
     <!-- 듀얼 스크린 아레나 (내 화면 VS 친구 화면) -->
@@ -535,7 +536,8 @@
     // --- 설정 및 상태 변수 ---
     const config = {
         easy: { rows: 9, cols: 9, mines: 10, cellSize: 30 },
-        medium: { rows: 12, cols: 12, mines: 22, cellSize: 24 }
+        medium: { rows: 12, cols: 12, mines: 22, cellSize: 24 },
+        hard: { rows: 14, cols: 14, mines: 36, cellSize: 20 }
     };
 
     let currentDiff = 'easy';
@@ -718,6 +720,15 @@
         friendBoardEl.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
         friendBoardEl.innerHTML = '';
         friendGrid = createEmptyGrid();
+        
+        // 봇 대결 시 봇 지뢰 배치도 초기화
+        let seedRunner = currentSeed;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                friendGrid[r][c] = { row: r, col: c, isMine: false, revealed: false, state: 0, neighborMines: 0 };
+            }
+        }
+        
         buildBoardDOM(friendBoardEl, friendGrid, false);
         friendMineCountEl.textContent = String(mines).padStart(3, '0');
         friendTimerEl.textContent = '000';
@@ -789,6 +800,28 @@
                 let count = 0;
                 getNeighbors(myGrid, r, c).forEach(n => { if (n.isMine) count++; });
                 myGrid[r][c].neighborMines = count;
+            }
+        }
+
+        // 봇의 지뢰도 동일 시드로 초기 배치
+        placed = 0;
+        seedRunner = currentSeed;
+        while (placed < maxMines) {
+            const r = Math.floor(seededRandom(seedRunner++) * rows);
+            const c = Math.floor(seededRandom(seedRunner++) * cols);
+            const key = `${r},${c}`;
+            if (!friendGrid[r][c].isMine && !safeCoords.has(key)) {
+                friendGrid[r][c].isMine = true;
+                placed++;
+            }
+        }
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (friendGrid[r][c].isMine) continue;
+                let count = 0;
+                getNeighbors(friendGrid, r, c).forEach(n => { if (n.isMine) count++; });
+                friendGrid[r][c].neighborMines = count;
             }
         }
     }
@@ -924,6 +957,9 @@
             } else {
                 el.textContent = '';
             }
+            if (friendGrid[msg.r] && friendGrid[msg.r][msg.c]) {
+                friendGrid[msg.r][msg.c].revealed = true;
+            }
         } else if (msg.action === 'flag' && el) {
             if (msg.state === 1) el.textContent = '🚩';
             else if (msg.state === 2) el.textContent = '❓';
@@ -944,7 +980,7 @@
         }
     }
 
-    // --- 인간미 있는 봇 AI ---
+    // --- 시각적 동작이 동기화되는 봇 AI ---
     function toggleBotMatch() {
         isBotActive = !isBotActive;
         const btn = document.getElementById('botToggleBtn');
@@ -959,30 +995,68 @@
         }
     }
 
+    function revealFriendCellCascade(r, c) {
+        const cell = friendGrid[r][c];
+        if (cell.revealed || cell.state === 1) return;
+
+        cell.revealed = true;
+        const el = getFriendCellEl(r, c);
+        if (!el) return;
+
+        el.classList.add('revealed');
+        el.textContent = '';
+
+        if (cell.neighborMines > 0) {
+            el.textContent = cell.neighborMines;
+            el.classList.add(`c-${cell.neighborMines}`);
+        } else {
+            getNeighbors(friendGrid, r, c).forEach(n => revealFriendCellCascade(n.row, n.col));
+        }
+    }
+
     function startBotAI() {
         clearTimeout(botTimeout);
         startFriendTimer();
 
-        const getHumanDelay = () => Math.floor(Math.random() * 700) + 1800; // 1.8초 ~ 2.5초 간격
+        // 봇 클릭 대기 시간 (1.5초 ~ 2.2초 간격)
+        const getHumanDelay = () => Math.floor(Math.random() * 700) + 1500;
 
         const botStep = () => {
             if (gameOver || !isBotActive) return;
 
-            // 10% 확률로 봇이 실수해서 폭발
-            const isError = Math.random() < 0.10;
+            // 아직 열리지 않은 칸 목록 추출
+            let unrevealed = [];
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (!friendGrid[r][c].revealed) unrevealed.push(friendGrid[r][c]);
+                }
+            }
 
-            if (isError) {
+            if (unrevealed.length === 0) return;
+
+            // 랜덤으로 1칸 선택
+            const target = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+
+            // 지뢰 클릭 시 봇 폭발
+            if (target.isMine) {
+                const el = getFriendCellEl(target.row, target.col);
+                if (el) {
+                    el.classList.add('mine');
+                    el.textContent = '💣';
+                }
                 friendFaceBtn.textContent = '😵';
-                triggerGameOver(true, '🎉 봇이 실수로 지뢰를 밟고 폭발했습니다! 나의 승리!');
+                triggerGameOver(true, '🎉 봇이 지뢰를 밟고 폭발했습니다! 나의 승리!');
                 return;
             }
 
-            let currentPct = parseInt(friendProgressStat.textContent.replace(/[^0-9]/g, '')) || 0;
-            let nextPct = Math.min(100, currentPct + Math.floor(Math.random() * 8) + 3);
-            
-            friendProgressStat.textContent = `진행률: ${nextPct}%`;
+            // 안전 구역 클릭 시 전파 연출
+            revealFriendCellCascade(target.row, target.col);
 
-            if (nextPct >= 100) {
+            let friendRev = friendBoardEl.querySelectorAll('.cell.revealed').length;
+            const pct = Math.min(100, Math.floor((friendRev / (rows * cols - mines)) * 100));
+            friendProgressStat.textContent = `진행률: ${pct}%`;
+
+            if (pct >= 100) {
                 friendFaceBtn.textContent = '😎';
                 triggerGameOver(false, '😭 봇이 먼저 진행률 100%를 달성했습니다! 패배!');
                 return;
